@@ -8,7 +8,112 @@ import calendar
 import datetime
 import json
 import base64
+import os
 from supabase import create_client
+
+# -----------------------------------------------------------------------------
+# 0. COMPONENTE PERSONALIZADO PARA PEGADO DIRECTO (CTRL + V) SIN CONFIRMACIÓN
+# -----------------------------------------------------------------------------
+COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "paste_component")
+os.makedirs(COMPONENT_DIR, exist_ok=True)
+
+html_paste_code = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #E0E3EB;
+        }
+        .paste-box {
+            background-color: #1A1E29;
+            border: 2px dashed #2962FF;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .paste-box:hover, .paste-box:focus {
+            background-color: #222736;
+            border-color: #3D72FF;
+            outline: none;
+        }
+        .title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #2962FF;
+            margin: 0;
+        }
+        .subtitle {
+            font-size: 11px;
+            color: #787B86;
+            margin-top: 4px;
+        }
+        #status {
+            font-size: 12px;
+            color: #26A69A;
+            margin-top: 6px;
+            font-weight: 600;
+            display: none;
+        }
+    </style>
+    <script>
+        function sendValue(val) {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: "streamlit:setComponentValue",
+                value: val
+            }, "*");
+        }
+        function setHeight() {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: "streamlit:setFrameHeight",
+                height: 90
+            }, "*");
+        }
+    </script>
+</head>
+<body onload="setHeight()">
+    <div class="paste-box" id="paste-box" tabindex="0">
+        <p class="title">📋 CLIC AQUÍ Y PRESIONA CTRL + V</p>
+        <p class="subtitle">La imagen se capturará directamente sin copiar textos ni confirmar códigos.</p>
+        <p id="status">✅ Captura recibida con éxito</p>
+    </div>
+
+    <script>
+        const pasteBox = document.getElementById('paste-box');
+        const statusText = document.getElementById('status');
+
+        window.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        const base64Data = evt.target.result;
+                        statusText.style.display = 'block';
+                        sendValue(base64Data);
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+"""
+
+with open(os.path.join(COMPONENT_DIR, "index.html"), "w", encoding="utf-8") as f:
+    f.write(html_paste_code)
+
+paste_component = components.declare_component("paste_component", path=COMPONENT_DIR)
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM)
@@ -950,53 +1055,18 @@ with tab_trades:
                         t_pop1, t_pop2 = st.tabs(["📋 Pegar Imagen (Ctrl + V)", "📁 Subir Archivo"])
                         
                         with t_pop1:
-                            st.caption("1. Copia tu gráfica (`Win + Shift + S` o PrtScn).<br>2. Haz clic abajo y presiona **Ctrl + V**.<br>3. Confirma el texto en la casilla.", unsafe_allow_html=True)
-                            
-                            paste_html = f"""
-                            <div id="p-box-{idx}" style="
-                                background-color: #1A1E29; 
-                                border: 2px dashed #2962FF; 
-                                border-radius: 8px; 
-                                padding: 12px; 
-                                text-align: center; 
-                                color: #E0E3EB; 
-                                cursor: pointer;">
-                                <p style="font-size: 13px; font-weight: 700; margin: 0; color: #2962FF;">
-                                    📋 CLIC AQUÍ Y PRESIONA CTRL + V
-                                </p>
-                                <img id="p-img-{idx}" style="max-width: 100%; max-height: 160px; display: none; margin-top: 8px; border-radius: 6px;" />
-                            </div>
-                            <script>
-                                const pImg_{idx} = document.getElementById('p-img-{idx}');
-                                window.addEventListener('paste', (e) => {{
-                                    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                                    for (let item of items) {{
-                                        if (item.kind === 'file' && item.type.startsWith('image/')) {{
-                                            const blob = item.getAsFile();
-                                            const reader = new FileReader();
-                                            reader.onload = function(evt) {{
-                                                pImg_{idx}.src = evt.target.result;
-                                                pImg_{idx}.style.display = 'block';
-                                                navigator.clipboard.writeText(evt.target.result).catch(() => {{}});
-                                            }};
-                                            reader.readAsDataURL(blob);
-                                        }}
-                                    }}
-                                }});
-                            </script>
-                            """
-                            components.html(paste_html, height=180)
-                            
                             tipo_p = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_p_{row_key}")
                             nota_p = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura", key=f"inp_nota_p_{row_key}")
-                            pasted_text = st.text_area("Confirmación Imagen (Ctrl + V):", placeholder="Pega aquí el código...", key=f"pasted_txt_{row_key}", height=70)
-                                
-                            if st.button("💾 Guardar Captura Pegada", key=f"btn_save_p_{row_key}", use_container_width=True):
-                                if pasted_text and len(pasted_text.strip()) > 50:
+                            
+                            pasted_b64 = paste_component(key=f"paste_comp_{row_key}")
+                            
+                            if pasted_b64:
+                                st.image(pasted_b64, caption="✅ Previsualización lista para guardar", use_container_width=True)
+                                if st.button("💾 Guardar Captura Pegada", key=f"btn_save_p_{row_key}", use_container_width=True):
                                     nueva_c = {
                                         "tipo": tipo_p,
                                         "nota": nota_p,
-                                        "url": pasted_text.strip(),
+                                        "url": pasted_b64,
                                         "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                     }
                                     capturas_list.append(nueva_c)
@@ -1007,8 +1077,6 @@ with tab_trades:
                                         st.rerun()
                                     except Exception as ex_p:
                                         st.error(f"Error al guardar: {ex_p}")
-                                else:
-                                    st.warning("Pega la imagen en la caja de confirmación.")
 
                         with t_pop2:
                             up_f = st.file_uploader("Selecciona archivo:", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{row_key}")
