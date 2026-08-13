@@ -172,7 +172,6 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
 
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
-# Agrupar cuentas por empresa/nombre
 grupos_cuentas = {}
 if cuentas_raw:
     for c in cuentas_raw:
@@ -181,7 +180,6 @@ if cuentas_raw:
             grupos_cuentas[nombre] = []
         grupos_cuentas[nombre].append(c)
 
-# Botones rápidos
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
     if cuentas_raw:
@@ -206,7 +204,6 @@ cuentas_seleccionadas_ids = []
 if cuentas_raw:
     for nombre_grp, lista_accs in grupos_cuentas.items():
         if len(lista_accs) == 1:
-            # Cuenta única
             acc = lista_accs[0]
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
@@ -217,7 +214,6 @@ if cuentas_raw:
             if st.sidebar.checkbox(label, value=st.session_state[key], key=key):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
-            # Múltiples cuentas
             child_ids = [str(a["account_number"]) for a in lista_accs]
             tot_bal_grp = sum([a["balance"] for a in lista_accs])
             master_key = f"master_{nombre_grp}"
@@ -265,7 +261,6 @@ if cuentas_raw:
 else:
     st.sidebar.info("Cargando cuentas...")
 
-# Filtrar Cuentas y Operaciones
 if cuentas_seleccionadas_ids:
     cuentas = [c for c in cuentas_raw if str(c["account_number"]) in cuentas_seleccionadas_ids]
 else:
@@ -287,13 +282,11 @@ if not df_ops.empty:
 st.title("📈 StickTrade Platform — Dashboard")
 st.caption("Visión consolidada y métricas de rendimiento en tiempo real.")
 
-# Cálculos Generales
 tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
 tot_actual = sum([c["balance"] for c in cuentas]) if cuentas else 0
 tot_ganado = tot_actual - tot_inicial
 pct_global = (tot_ganado / tot_inicial * 100) if tot_inicial > 0 else 0
 
-# Métricas de Trading
 total_trades = len(df_ops) if not df_ops.empty else 0
 wins = len(df_ops[df_ops['win_loss'] == 'WIN']) if not df_ops.empty else 0
 losses = len(df_ops[df_ops['win_loss'] == 'LOSS']) if not df_ops.empty else 0
@@ -307,7 +300,6 @@ avg_win = df_ops[df_ops['resultado'] > 0]['resultado'].mean() if wins > 0 else 0
 avg_loss = abs(df_ops[df_ops['resultado'] < 0]['resultado'].mean()) if losses > 0 else 0
 risk_reward = (avg_win / avg_loss) if avg_loss > 0 else 0
 
-# Fila de Tarjetas KPI
 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
 
 with kpi1:
@@ -561,7 +553,7 @@ with tab_analytics:
         st.plotly_chart(fig_daily, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS
+# TAB 3: ESTADO DE CUENTAS & CORRECCIÓN DE COLORES / FLECHAS STRICT
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -574,31 +566,116 @@ with tab_cuentas:
             bal_act = c["balance"]
             equidad = c["equidad"]
             ganancia = bal_act - bal_ini
+            pct_ganancia = (ganancia / bal_ini * 100) if bal_ini > 0 else 0
             
             p_diaria_max = c["perdida_diaria_max"]
             p_diaria_act = c["perdida_diaria_actual"]
             margen_diario = p_diaria_max - p_diaria_act
             
-            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — [{c['estado']}]", expanded=True):
+            estado_badge = "🟢 Fondeada" if c["estado"] == "Fondeada" else f"🔵 {c['estado']}"
+            
+            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — {estado_badge}", expanded=True):
                 col_c1, col_c2, col_c3 = st.columns(3)
                 
-                col_c1.metric("Balance / Equidad", f"${bal_act:,.2f}", f"Equidad: ${equidad:,.2f}")
-                col_c2.metric("Margen Pérdida Diaria", f"${margen_diario:,.2f}", f"Límite Máx: ${p_diaria_max:,.2f}")
+                # Metric 1: Balance y Ganancia Neto
+                delta_bal_str = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00 (0.00%)"
+                col_c1.metric(
+                    "Balance Actual", 
+                    f"${bal_act:,.2f}", 
+                    delta=delta_bal_str, 
+                    delta_color="normal" if ganancia >= 0 else "inverse"
+                )
+                col_c1.caption(f"Equidad actual: **${equidad:,.2f}**")
                 
+                # Metric 2: Margen Pérdida Diaria
+                delta_loss_str = f"-${p_diaria_act:,.2f} consumidos hoy" if p_diaria_act > 0 else "Sin pérdidas hoy"
+                col_c2.metric(
+                    "Margen Pérdida Diaria", 
+                    f"${margen_diario:,.2f}", 
+                    delta=delta_loss_str, 
+                    delta_color="inverse" if p_diaria_act > 0 else "off"
+                )
+                col_c2.caption(f"Límite máximo diario: **${p_diaria_max:,.2f}**")
+                
+                # Metric 3: Objetivo o Payout
                 if c["estado"] != "Fondeada":
                     obj = c["objetivo_profit"]
                     pct_prog = min(max(ganancia / obj, 0.0), 1.0) if obj > 0 else 1.0
-                    col_c3.metric("Objetivo Profit Target", f"${obj:,.2f}", f"Ganado: ${ganancia:,.2f}")
                     
-                    st.write("**Progreso hacia el Pase de Fase:**")
-                    st.progress(pct_prog, text=f"{pct_prog*100:.1f}% alcanzado (${ganancia:,.2f} / ${obj:,.2f})")
+                    delta_obj_str = f"+${ganancia:,.2f} de ${obj:,.2f}" if ganancia >= 0 else f"-${abs(ganancia):,.2f} de ${obj:,.2f}"
+                    col_c3.metric(
+                        "Objetivo Profit Target", 
+                        f"${obj:,.2f}", 
+                        delta=delta_obj_str, 
+                        delta_color="normal" if ganancia >= 0 else "inverse"
+                    )
                 else:
-                    col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}")
-                    st.caption("🟢 Cuenta Fondeada activa.")
+                    delta_payout_str = f"+${ganancia:,.2f} acumulado" if ganancia >= 0 else f"-${abs(ganancia):,.2f} acumulado"
+                    col_c3.metric(
+                        "Payout Acumulado", 
+                        f"${ganancia:,.2f}", 
+                        delta=delta_payout_str, 
+                        delta_color="normal" if ganancia >= 0 else "inverse"
+                    )
                 
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # Detalles de Texto e Indicadores de Color Estrictos
+                if c["estado"] != "Fondeada":
+                    st.write("**Progreso hacia el Objetivo (Phase Pass):**")
+                    st.progress(pct_prog)
+                    
+                    if ganancia > 0:
+                        st.markdown(
+                            f'<span style="color:#26A69A; font-weight:700;">⬆ +${ganancia:,.2f} (+{pct_ganancia:.2f}%)</span> — '
+                            f'{pct_prog*100:.1f}% alcanzado del objetivo (${obj:,.2f})', 
+                            unsafe_allow_html=True
+                        )
+                    elif ganancia < 0:
+                        st.markdown(
+                            f'<span style="color:#EF5350; font-weight:700;">⬇ -${abs(ganancia):,.2f} ({pct_ganancia:.2f}%)</span> — '
+                            f'Retroceso respecto al balance inicial (${bal_ini:,.2f})', 
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown(
+                            '<span style="color:#787B86; font-weight:700;">➡️ $0.00 (0.00%)</span> — Sin variación respecto al balance inicial', 
+                            unsafe_allow_html=True
+                        )
+                else:
+                    if ganancia > 0:
+                        st.markdown(
+                            f'<span style="color:#26A69A; font-weight:700;">🟢 Payout acumulado disponible: +${ganancia:,.2f} (+{pct_ganancia:.2f}%)</span>', 
+                            unsafe_allow_html=True
+                        )
+                    elif ganancia < 0:
+                        st.markdown(
+                            f'<span style="color:#EF5350; font-weight:700;">🔴 Cuenta en Drawdown: -${abs(ganancia):,.2f} ({pct_ganancia:.2f}%)</span>', 
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown(
+                            '<span style="color:#787B86; font-weight:700;">⚪ Cuenta en balance inicial ($0.00 de profit)</span>', 
+                            unsafe_allow_html=True
+                        )
+                
+                # Uso del Límite de Pérdida Diaria
                 pct_drawdown = min(max(p_diaria_act / p_diaria_max, 0.0), 1.0) if p_diaria_max > 0 else 0
-                st.write("**Uso del Límite de Pérdida Diaria:**")
-                st.progress(pct_drawdown, text=f"{pct_drawdown*100:.1f}% consumido (${p_diaria_act:,.2f} / ${p_diaria_max:,.2f})")
+                st.write("**Límite de Pérdida Diaria Consumido Hoy:**")
+                st.progress(pct_drawdown)
+                
+                if p_diaria_act > 0:
+                    st.markdown(
+                        f'<span style="color:#EF5350; font-weight:700;">⬇ -${p_diaria_act:,.2f} consumidos hoy</span> — '
+                        f'Quedan **${margen_diario:,.2f}** de margen diario seguro', 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        f'<span style="color:#26A69A; font-weight:700;">⬆ $0.00 consumidos hoy</span> — '
+                        f'Tienes el 100% de tu margen diario disponible (**${p_diaria_max:,.2f}**)', 
+                        unsafe_allow_html=True
+                    )
 
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & ANALYTICS VISUAL
@@ -610,16 +687,13 @@ with tab_trades:
     if df_ops.empty:
         st.info("No hay operaciones para la selección de cuentas actual.")
     else:
-        # Mapa de capital inicial
         map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_raw} if cuentas_raw else {}
         
-        # Copia y agrupación por día + cuenta
         df_ops_copy = df_ops.copy()
         df_ops_copy["acc_id_str"] = df_ops_copy["account_number"].astype(str)
         
         df_diario = df_ops_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"])["resultado"].sum().reset_index()
         
-        # Calcular % sobre balance inicial
         df_diario["balance_inicial"] = df_diario["acc_id_str"].map(map_bal_inicial)
         df_diario["pct_rendimiento"] = (df_diario["resultado"] / df_diario["balance_inicial"]) * 100.0
         
@@ -633,7 +707,6 @@ with tab_trades:
                 
         df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar_resultado)
         
-        # --- CONTROLES DE FILTRO ---
         col_f1, col_f2 = st.columns([2, 2])
         
         min_f = df_diario["fecha_dia"].min()
@@ -654,7 +727,6 @@ with tab_trades:
                 default=["WIN", "LOSS", "BE"]
             )
             
-        # Aplicar filtros al DataFrame
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
             f_start, f_end = rango_fechas[0], rango_fechas[1]
             df_filtered_tab4 = df_diario[(df_diario["fecha_dia"] >= f_start) & (df_diario["fecha_dia"] <= f_end)]
@@ -668,14 +740,12 @@ with tab_trades:
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- SECCIÓN GRÁFICA SUPERIOR ---
         if df_filtered_tab4.empty:
             st.info("No hay registros que coincidan con los filtros aplicados.")
         else:
             chart_col1, chart_col2 = st.columns([1, 1])
             
             with chart_col1:
-                # 1. Gráfico Horizontal: Distribución por Cuenta
                 acc_stats = df_filtered_tab4.groupby(["nombre_cuenta", "clasificacion"]).size().reset_index(name="cantidad")
                 acc_totals = acc_stats.groupby("nombre_cuenta")["cantidad"].sum().reset_index(name="total_cuenta")
                 acc_stats = pd.merge(acc_stats, acc_totals, on="nombre_cuenta")
@@ -705,7 +775,6 @@ with tab_trades:
                 st.plotly_chart(fig_hbar, use_container_width=True)
                 
             with chart_col2:
-                # 2. Gráfico Donut: Totales del Periodo Filtrado
                 tot_counts = df_filtered_tab4["clasificacion"].value_counts().reset_index()
                 tot_counts.columns = ["clasificacion", "cantidad"]
                 
@@ -732,7 +801,6 @@ with tab_trades:
                 
             st.divider()
             
-            # --- TABLA DE DETALLE DIARIO ---
             st.subheader("📋 Detalle de Sesiones Diarias")
             
             df_tab4_view = pd.DataFrame({
