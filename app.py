@@ -27,15 +27,27 @@ st.markdown("""
         color: #E0E3EB;
     }
     
-    /* Cambiar el fondo de las etiquetas del Multiselect a AZUL TRADINGVIEW (#2962FF) */
-    span[data-baseweb="tag"] {
-        background-color: #2962FF !important;
-        border-radius: 6px !important;
-        padding: 3px 8px !important;
+    /* Estilo de los Checkboxes de Selección de Cuentas */
+    div[data-baseweb="checkbox"] {
+        margin-bottom: 8px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        transition: background-color 0.2s;
     }
-    span[data-baseweb="tag"] * {
-        color: #FFFFFF !important;
-        fill: #FFFFFF !important;
+    div[data-baseweb="checkbox"]:hover {
+        background-color: #1A1E29;
+    }
+    
+    /* Cuadro de Check cuando está activo (Azul TradingView #2962FF) */
+    div[data-baseweb="checkbox"] input:checked + div {
+        background-color: #2962FF !important;
+        border-color: #2962FF !important;
+    }
+    
+    div[data-baseweb="checkbox"] span {
+        color: #E0E3EB !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
     }
     
     /* Tarjetas KPI */
@@ -91,7 +103,7 @@ def cargar_datos():
 cuentas_raw, ops_raw = cargar_datos()
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / FILTROS MULTI-SELECCIÓN
+# 3. BARRA LATERAL / LISTA DE CHECKBOXES
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade Platform")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -104,13 +116,38 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
 
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
-nombres_cuentas_disponibles = list(set([c["nombre_cuenta"] for c in cuentas_raw])) if cuentas_raw else []
+nombres_cuentas_disponibles = sorted(list(set([c["nombre_cuenta"] for c in cuentas_raw]))) if cuentas_raw else []
 
-cuentas_seleccionadas = st.sidebar.multiselect(
-    "Selecciona una o varias cuentas:",
-    options=nombres_cuentas_disponibles,
-    default=nombres_cuentas_disponibles
-)
+# Botones rápidos para Seleccionar/Deseleccionar todas
+col_b1, col_b2 = st.sidebar.columns(2)
+if col_b1.button("Todas", use_container_width=True):
+    for c in nombres_cuentas_disponibles:
+        st.session_state[f"chk_{c}"] = True
+    st.rerun()
+
+if col_b2.button("Ninguna", use_container_width=True):
+    for c in nombres_cuentas_disponibles:
+        st.session_state[f"chk_{c}"] = False
+    st.rerun()
+
+st.sidebar.markdown("<br>", unsafe_allow_html=True)
+
+# Lista de Checkboxes
+cuentas_seleccionadas = []
+if nombres_cuentas_disponibles:
+    for c_nombre in nombres_cuentas_disponibles:
+        if f"chk_{c_nombre}" not in st.session_state:
+            st.session_state[f"chk_{c_nombre}"] = True
+            
+        checked = st.sidebar.checkbox(
+            c_nombre, 
+            value=st.session_state[f"chk_{c_nombre}"], 
+            key=f"chk_{c_nombre}"
+        )
+        if checked:
+            cuentas_seleccionadas.append(c_nombre)
+else:
+    st.sidebar.info("Cargando cuentas...")
 
 # Filtrar Cuentas y Operaciones
 if cuentas_seleccionadas:
