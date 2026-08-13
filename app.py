@@ -553,7 +553,7 @@ with tab_analytics:
         st.plotly_chart(fig_daily, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS & CORRECCIÓN DE COLORES / FLECHAS STRICT
+# TAB 3: ESTADO DE CUENTAS (DISEÑO Y FORMATO ORIGINAL)
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -572,110 +572,65 @@ with tab_cuentas:
             p_diaria_act = c["perdida_diaria_actual"]
             margen_diario = p_diaria_max - p_diaria_act
             
-            estado_badge = "🟢 Fondeada" if c["estado"] == "Fondeada" else f"🔵 {c['estado']}"
-            
-            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — {estado_badge}", expanded=True):
+            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — [{c['estado']}]", expanded=True):
                 col_c1, col_c2, col_c3 = st.columns(3)
                 
-                # Metric 1: Balance y Ganancia Neto
-                delta_bal_str = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00 (0.00%)"
+                # Metric 1: Balance Actual (Rojo con flecha abajo si es negativo, Verde con flecha arriba si es positivo)
+                delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
                 col_c1.metric(
                     "Balance Actual", 
                     f"${bal_act:,.2f}", 
-                    delta=delta_bal_str, 
-                    delta_color="normal" if ganancia >= 0 else "inverse"
+                    delta=delta_bal
                 )
-                col_c1.caption(f"Equidad actual: **${equidad:,.2f}**")
+                col_c1.caption(f"Equidad actual: ${equidad:,.2f}")
                 
                 # Metric 2: Margen Pérdida Diaria
-                delta_loss_str = f"-${p_diaria_act:,.2f} consumidos hoy" if p_diaria_act > 0 else "Sin pérdidas hoy"
+                delta_loss = f"-${p_diaria_act:,.2f}" if p_diaria_act > 0 else "Sin pérdidas hoy"
                 col_c2.metric(
                     "Margen Pérdida Diaria", 
                     f"${margen_diario:,.2f}", 
-                    delta=delta_loss_str, 
-                    delta_color="inverse" if p_diaria_act > 0 else "off"
+                    delta=delta_loss,
+                    delta_color="normal" if p_diaria_act > 0 else "off"
                 )
-                col_c2.caption(f"Límite máximo diario: **${p_diaria_max:,.2f}**")
+                col_c2.caption(f"Límite máximo diario: ${p_diaria_max:,.2f}")
                 
-                # Metric 3: Objetivo o Payout
+                # Metric 3: Objetivo Profit Target o Payout
                 if c["estado"] != "Fondeada":
                     obj = c["objetivo_profit"]
                     pct_prog = min(max(ganancia / obj, 0.0), 1.0) if obj > 0 else 1.0
+                    delta_obj = f"{ganancia:+,.2f} de {obj:,.2f}"
                     
-                    delta_obj_str = f"+${ganancia:,.2f} de ${obj:,.2f}" if ganancia >= 0 else f"-${abs(ganancia):,.2f} de ${obj:,.2f}"
                     col_c3.metric(
                         "Objetivo Profit Target", 
                         f"${obj:,.2f}", 
-                        delta=delta_obj_str, 
-                        delta_color="normal" if ganancia >= 0 else "inverse"
+                        delta=delta_obj
                     )
                 else:
-                    delta_payout_str = f"+${ganancia:,.2f} acumulado" if ganancia >= 0 else f"-${abs(ganancia):,.2f} acumulado"
+                    delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
                     col_c3.metric(
-                        "Payout Acumulado", 
+                        "Beneficio Acumulado (Payout)", 
                         f"${ganancia:,.2f}", 
-                        delta=delta_payout_str, 
-                        delta_color="normal" if ganancia >= 0 else "inverse"
+                        delta=delta_payout
                     )
                 
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Detalles de Texto e Indicadores de Color Estrictos
+                # Progreso hacia el Objetivo (Barra limpia original)
                 if c["estado"] != "Fondeada":
+                    obj = c["objetivo_profit"]
                     st.write("**Progreso hacia el Objetivo (Phase Pass):**")
-                    st.progress(pct_prog)
-                    
-                    if ganancia > 0:
-                        st.markdown(
-                            f'<span style="color:#26A69A; font-weight:700;">⬆ +${ganancia:,.2f} (+{pct_ganancia:.2f}%)</span> — '
-                            f'{pct_prog*100:.1f}% alcanzado del objetivo (${obj:,.2f})', 
-                            unsafe_allow_html=True
-                        )
-                    elif ganancia < 0:
-                        st.markdown(
-                            f'<span style="color:#EF5350; font-weight:700;">⬇ -${abs(ganancia):,.2f} ({pct_ganancia:.2f}%)</span> — '
-                            f'Retroceso respecto al balance inicial (${bal_ini:,.2f})', 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.markdown(
-                            '<span style="color:#787B86; font-weight:700;">➡️ $0.00 (0.00%)</span> — Sin variación respecto al balance inicial', 
-                            unsafe_allow_html=True
-                        )
+                    st.progress(
+                        pct_prog, 
+                        text=f"{pct_prog*100:.1f}% alcanzado (${ganancia:,.2f} / ${obj:,.2f})"
+                    )
                 else:
-                    if ganancia > 0:
-                        st.markdown(
-                            f'<span style="color:#26A69A; font-weight:700;">🟢 Payout acumulado disponible: +${ganancia:,.2f} (+{pct_ganancia:.2f}%)</span>', 
-                            unsafe_allow_html=True
-                        )
-                    elif ganancia < 0:
-                        st.markdown(
-                            f'<span style="color:#EF5350; font-weight:700;">🔴 Cuenta en Drawdown: -${abs(ganancia):,.2f} ({pct_ganancia:.2f}%)</span>', 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.markdown(
-                            '<span style="color:#787B86; font-weight:700;">⚪ Cuenta en balance inicial ($0.00 de profit)</span>', 
-                            unsafe_allow_html=True
-                        )
+                    st.caption("🟢 Cuenta Fondeada activa.")
                 
-                # Uso del Límite de Pérdida Diaria
+                # Uso del Límite de Pérdida Diaria (Barra limpia original)
                 pct_drawdown = min(max(p_diaria_act / p_diaria_max, 0.0), 1.0) if p_diaria_max > 0 else 0
                 st.write("**Límite de Pérdida Diaria Consumido Hoy:**")
-                st.progress(pct_drawdown)
-                
-                if p_diaria_act > 0:
-                    st.markdown(
-                        f'<span style="color:#EF5350; font-weight:700;">⬇ -${p_diaria_act:,.2f} consumidos hoy</span> — '
-                        f'Quedan **${margen_diario:,.2f}** de margen diario seguro', 
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        f'<span style="color:#26A69A; font-weight:700;">⬆ $0.00 consumidos hoy</span> — '
-                        f'Tienes el 100% de tu margen diario disponible (**${p_diaria_max:,.2f}**)', 
-                        unsafe_allow_html=True
-                    )
+                st.progress(
+                    pct_drawdown, 
+                    text=f"{pct_drawdown*100:.1f}% consumido (${p_diaria_act:,.2f} / ${p_diaria_max:,.2f})"
+                )
 
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & ANALYTICS VISUAL
