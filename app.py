@@ -99,7 +99,7 @@ st.markdown("""
     }
     
     /* Ocultar el input técnico de transferencia de datos */
-    div[data-testid="stTextInput"]:has(input[aria-label^="target_"]) {
+    div[data-testid="stTextInput"]:has(input[placeholder^="target_"]) {
         display: none !important;
     }
 
@@ -942,8 +942,13 @@ with tab_trades:
                         tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
                         nota_f = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura en POI", key=f"inp_nota_f_{row_key}")
 
-                        # Input técnico receptor
-                        b64_val = st.text_input("", key=f"hidden_b64_{row_key}", aria_label=f"target_{row_key}")
+                        # Input técnico receptor (sintaxis estándar válida)
+                        b64_val = st.text_input(
+                            label=f"target_{row_key}", 
+                            key=f"hidden_b64_{row_key}", 
+                            label_visibility="collapsed", 
+                            placeholder=f"target_{row_key}"
+                        )
 
                         # Componente de pegado compatible con Brave Browser
                         html_brave_paste = f"""
@@ -998,7 +1003,7 @@ with tab_trades:
                                         const inputs = parentDoc.querySelectorAll('input');
                                         let targetInput = null;
                                         for (let inp of inputs) {{
-                                            if (inp.getAttribute('aria-label') === 'target_{row_key}') {{
+                                            if (inp.getAttribute('placeholder') === 'target_{row_key}') {{
                                                 targetInput = inp;
                                                 break;
                                             }}
