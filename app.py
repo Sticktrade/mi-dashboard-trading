@@ -9,7 +9,7 @@ import datetime
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM - BLUE THEME OVERRIDE)
+# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="StickTrade Platform",
@@ -18,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados para forzar el AZUL (#2962FF) en toda la interfaz
+# Estilos CSS avanzados
 st.markdown("""
 <style>
     /* Forzar variable de color primario a Azul TradingView */
@@ -49,10 +49,10 @@ st.markdown("""
         background-color: #282D3C !important;
     }
     
-    /* Estilo de las Casillas de Verificación (Checkboxes) */
+    /* Estilo de los Checkboxes de Selección de Cuentas */
     div[data-baseweb="checkbox"] {
-        margin-bottom: 8px;
-        padding: 4px 8px;
+        margin-bottom: 6px;
+        padding: 4px 6px;
         border-radius: 6px;
         transition: background-color 0.2s;
     }
@@ -74,11 +74,19 @@ st.markdown("""
     
     div[data-baseweb="checkbox"] span {
         color: #E0E3EB !important;
-        font-size: 14px !important;
+        font-size: 13px !important;
         font-weight: 500 !important;
     }
     
-    /* Botones con borde de enfocado/hover en Azul */
+    /* Estilo para los despliegues de grupos de cuentas */
+    .stSidebar .stExpander {
+        border: 1px solid #282D3C !important;
+        border-radius: 8px !important;
+        background-color: #1A1E29 !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* Botones */
     .stButton > button {
         border-radius: 8px !important;
         border: 1px solid #282D3C !important;
@@ -143,7 +151,7 @@ def cargar_datos():
 cuentas_raw, ops_raw = cargar_datos()
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / LISTA DE CHECKBOXES
+# 3. BARRA LATERAL / AGRUPACIÓN DESPLEGABLE DE CUENTAS
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade Platform")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -156,41 +164,65 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
 
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
-nombres_cuentas_disponibles = sorted(list(set([c["nombre_cuenta"] for c in cuentas_raw]))) if cuentas_raw else []
+# Agrupar cuentas por nombre de empresa/prop firm
+grupos_cuentas = {}
+if cuentas_raw:
+    for c in cuentas_raw:
+        nombre = c["nombre_cuenta"]
+        if nombre not in grupos_cuentas:
+            grupos_cuentas[nombre] = []
+        grupos_cuentas[nombre].append(c)
 
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
-    for c in nombres_cuentas_disponibles:
-        st.session_state[f"chk_{c}"] = True
-    st.rerun()
+    if cuentas_raw:
+        for c in cuentas_raw:
+            st.session_state[f"chk_{c['account_number']}"] = True
+        st.rerun()
 
 if col_b2.button("Ninguna", use_container_width=True):
-    for c in nombres_cuentas_disponibles:
-        st.session_state[f"chk_{c}"] = False
-    st.rerun()
+    if cuentas_raw:
+        for c in cuentas_raw:
+            st.session_state[f"chk_{c['account_number']}"] = False
+        st.rerun()
 
 st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
-# Lista de Checkboxes
-cuentas_seleccionadas = []
-if nombres_cuentas_disponibles:
-    for c_nombre in nombres_cuentas_disponibles:
-        if f"chk_{c_nombre}" not in st.session_state:
-            st.session_state[f"chk_{c_nombre}"] = True
-            
-        checked = st.sidebar.checkbox(
-            c_nombre, 
-            value=st.session_state[f"chk_{c_nombre}"], 
-            key=f"chk_{c_nombre}"
-        )
-        if checked:
-            cuentas_seleccionadas.append(c_nombre)
+# Generar lista inteligente con desplegables para múltiples cuentas
+cuentas_seleccionadas_ids = []
+
+if cuentas_raw:
+    for nombre_grp, lista_accs in grupos_cuentas.items():
+        if len(lista_accs) == 1:
+            # Cuenta única de este tipo
+            acc = lista_accs[0]
+            acc_id = str(acc["account_number"])
+            key = f"chk_{acc_id}"
+            if key not in st.session_state:
+                st.session_state[key] = True
+                
+            label = f"{acc['nombre_cuenta']} — ${acc['balance']:,.2f}"
+            if st.sidebar.checkbox(label, value=st.session_state[key], key=key):
+                cuentas_seleccionadas_ids.append(acc_id)
+        else:
+            # Múltiples cuentas con el mismo nombre -> Desplegable Expander
+            tot_bal_grp = sum([a["balance"] for a in lista_accs])
+            with st.sidebar.expander(f"📁 {nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}", expanded=True):
+                for acc in lista_accs:
+                    acc_id = str(acc["account_number"])
+                    key = f"chk_{acc_id}"
+                    if key not in st.session_state:
+                        st.session_state[key] = True
+                        
+                    label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
+                    if st.checkbox(label, value=st.session_state[key], key=key):
+                        cuentas_seleccionadas_ids.append(acc_id)
 else:
     st.sidebar.info("Cargando cuentas...")
 
-# Filtrar Cuentas y Operaciones
-if cuentas_seleccionadas:
-    cuentas = [c for c in cuentas_raw if c["nombre_cuenta"] in cuentas_seleccionadas]
+# Filtrar Cuentas y Operaciones por ID de cuenta único
+if cuentas_seleccionadas_ids:
+    cuentas = [c for c in cuentas_raw if str(c["account_number"]) in cuentas_seleccionadas_ids]
 else:
     cuentas = []
 
@@ -199,8 +231,8 @@ df_ops = pd.DataFrame(ops_raw) if ops_raw else pd.DataFrame()
 if not df_ops.empty:
     df_ops['fecha_dt'] = pd.to_datetime(df_ops['fecha'])
     df_ops['fecha_dia'] = df_ops['fecha_dt'].dt.date
-    if cuentas_seleccionadas:
-        df_ops = df_ops[df_ops["nombre_cuenta"].isin(cuentas_seleccionadas)]
+    if cuentas_seleccionadas_ids:
+        df_ops = df_ops[df_ops["account_number"].astype(str).isin(cuentas_seleccionadas_ids)]
     else:
         df_ops = pd.DataFrame()
 
@@ -509,7 +541,7 @@ with tab_cuentas:
             p_diaria_act = c["perdida_diaria_actual"]
             margen_diario = p_diaria_max - p_diaria_act
             
-            with st.expander(f"🔹 **{c['nombre_cuenta']}** — [{c['estado']}]", expanded=True):
+            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — [{c['estado']}]", expanded=True):
                 col_c1, col_c2, col_c3 = st.columns(3)
                 
                 col_c1.metric("Balance / Equidad", f"${bal_act:,.2f}", f"Equidad: ${equidad:,.2f}")
@@ -542,6 +574,7 @@ with tab_trades:
         df_view = pd.DataFrame({
             "Fecha": pd.to_datetime(df_ops["fecha"]).dt.strftime('%Y-%m-%d %H:%M'),
             "Cuenta": df_ops["nombre_cuenta"],
+            "ID Cuenta": df_ops["account_number"],
             "Símbolo": df_ops["simbolo"],
             "Tipo": df_ops["tipo"],
             "Resultado ($)": df_ops["resultado"].apply(lambda x: f"${x:,.2f}"),
