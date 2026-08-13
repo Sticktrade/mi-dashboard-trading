@@ -710,10 +710,17 @@ with tab_trades:
         df_ops_copy = df_ops.copy()
         df_ops_copy["acc_id_str"] = df_ops_copy["account_number"].astype(str)
         
+        # Garantizar que las columnas existan antes del groupby para evitar KeyError
+        if "capturas" not in df_ops_copy.columns:
+            df_ops_copy["capturas"] = None
+        if "resultado" not in df_ops_copy.columns:
+            df_ops_copy["resultado"] = 0.0
+        if "nombre_cuenta" not in df_ops_copy.columns:
+            df_ops_copy["nombre_cuenta"] = "Cuenta"
+            
         # Mapeo de datos para el listado diario
         df_diario = df_ops_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"]).agg({
-            "resultado": "sum",
-            "capturas": lambda x: list(x) if any(x) else []
+            "resultado": "sum"
         }).reset_index()
         
         df_diario["balance_inicial"] = df_diario["acc_id_str"].map(map_bal_inicial)
@@ -873,7 +880,7 @@ with tab_trades:
                     res_formatted = f"+${res_num:,.2f}"
                     pct_formatted = f"+{pct_num:.2f}%"
                 elif clasif == "LOSS":
-                    badge = "ffffff 🟥 LOSS"
+                    badge = "🟥 LOSS"
                     res_color_cls = "red-text"
                     res_formatted = f"-${abs(res_num):,.2f}"
                     pct_formatted = f"{pct_num:.2f}%"
@@ -882,8 +889,6 @@ with tab_trades:
                     res_color_cls = ""
                     res_formatted = f"${res_num:,.2f}"
                     pct_formatted = f"{pct_num:.2f}%"
-
-                badge = badge.replace("ffffff ", "")
 
                 # Expander como Fila de Tabla
                 cap_icon_str = f"📸 {num_caps} capturas" if num_caps > 0 else "📸 Adjuntar"
