@@ -97,11 +97,6 @@ st.markdown("""
     .stSidebar div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
         padding-left: 14px !important;
     }
-    
-    /* Ocultar el input técnico de transferencia de datos */
-    div[data-testid="stTextInput"]:has(input[placeholder^="target_"]) {
-        display: none !important;
-    }
 
     /* Botones */
     .stButton > button {
@@ -935,22 +930,23 @@ with tab_trades:
                                 del st.session_state[f"active_zoom_{row_key}"]
                                 st.rerun()
 
-                        # ZONA DE SUBIDA DIRECTA CON CTRL + V (ESTILO NOTION)
+                        # ZONA DE SUBIDA DIRECTA CON CTRL + V (ESTILO NOTION CON PUENTE DE URL)
                         st.markdown("---")
                         st.markdown("##### 📤 Adjuntar Nueva Captura")
                         
                         tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
                         nota_f = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura en POI", key=f"inp_nota_f_{row_key}")
 
-                        # Input técnico receptor (sintaxis estándar válida)
-                        b64_val = st.text_input(
-                            label=f"target_{row_key}", 
-                            key=f"hidden_b64_{row_key}", 
-                            label_visibility="collapsed", 
-                            placeholder=f"target_{row_key}"
-                        )
+                        # Capturar imagen si viene por URL (Query Param)
+                        param_key = f"pasted_img_{row_key}"
+                        if param_key in st.query_params:
+                            st.session_state[f"active_b64_{row_key}"] = st.query_params[param_key]
+                            st.query_params.clear()
+                            st.rerun()
 
-                        # Componente de pegado compatible con Brave Browser
+                        current_b64 = st.session_state.get(f"active_b64_{row_key}")
+
+                        # Componente JavaScript robusto con recarga por URL
                         html_brave_paste = f"""
                         <div id="box_{row_key}" style="
                             background-color: #1A1E29;
@@ -970,10 +966,10 @@ with tab_trades:
                                 📋 HAZ CLIC AQUÍ Y PRESIONA CTRL + V
                             </p>
                             <p style="font-size: 11px; color: #787B86; margin-top: 4px;">
-                                La imagen se pegará instantáneamente (Brave / Chrome / Edge)
+                                Pegado instantáneo (Brave / Chrome / Edge)
                             </p>
                             <p id="msg_{row_key}" style="font-size: 12px; color: #26A69A; margin-top: 6px; font-weight: 700; display: none;">
-                                ✅ Captura detectada correctamente
+                                ✅ Captura detectada. Cargando...
                             </p>
                         </div>
 
@@ -983,42 +979,7 @@ with tab_trades:
                                 const msg = document.getElementById('msg_{row_key}');
                                 const box = document.getElementById('box_{row_key}');
 
-                                function setNativeValue(element, value) {{
-                                    const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set;
-                                    const prototype = Object.getPrototypeOf(element);
-                                    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-
-                                    if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {{
-                                        prototypeValueSetter.call(element, value);
-                                    }} else if (valueSetter) {{
-                                        valueSetter.call(element, value);
-                                    }} else {{
-                                        element.value = value;
-                                    }}
-                                }}
-
-                                function sendToStreamlit(b64Data) {{
-                                    try {{
-                                        const parentDoc = window.parent.document;
-                                        const inputs = parentDoc.querySelectorAll('input');
-                                        let targetInput = null;
-                                        for (let inp of inputs) {{
-                                            if (inp.getAttribute('placeholder') === 'target_{row_key}') {{
-                                                targetInput = inp;
-                                                break;
-                                            }}
-                                        }}
-                                        if (targetInput) {{
-                                            setNativeValue(targetInput, b64Data);
-                                            targetInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                            targetInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                                        }}
-                                    }} catch(e) {{
-                                        console.error("Paste bridge error:", e);
-                                    }}
-                                }}
-
-                                function handlePaste(e) {{
+                                area.addEventListener('paste', function(e) {{
                                     const clipboardData = e.clipboardData || window.clipboardData;
                                     if (!clipboardData) return;
                                     const items = clipboardData.items;
@@ -1032,41 +993,48 @@ with tab_trades:
                                                 const base64Data = event.target.result;
                                                 msg.style.display = 'block';
                                                 box.style.borderColor = '#26A69A';
-                                                sendToStreamlit(base64Data);
+                                                
+                                                // Enviar mediante parámetro en URL al contenedor principal
+                                                const url = new URL(window.parent.location.href);
+                                                url.searchParams.set('{param_key}', base64Data);
+                                                window.parent.location.href = url.toString();
                                             }};
                                             reader.readAsDataURL(blob);
                                             e.preventDefault();
                                             break;
                                         }}
                                     }}
-                                }}
-
-                                area.addEventListener('paste', handlePaste);
+                                }});
                             }})();
                         </script>
                         """
                         
                         st.components.v1.html(html_brave_paste, height=100)
 
-                        if b64_val:
-                            st.image(b64_val, caption="✅ Previsualización de la captura pegada", use_container_width=True)
+                        if current_b64:
+                            st.image(current_b64, caption="✅ Previsualización de la captura pegada", use_container_width=True)
+                            if st.button("🗑️ Quitar imagen actual", key=f"clear_b64_{row_key}", use_container_width=True):
+                                del st.session_state[f"active_b64_{row_key}"]
+                                st.rerun()
 
                         if st.button("💾 Guardar Captura Pegada", key=f"btn_save_f_{row_key}", use_container_width=True):
-                            if b64_val:
+                            if current_b64:
                                 nueva_c = {
                                     "tipo": tipo_f,
                                     "nota": nota_f,
-                                    "url": b64_val,
+                                    "url": current_b64,
                                     "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                 }
                                 capturas_list.append(nueva_c)
                                 try:
                                     update_op_capturas(op_row, capturas_list)
-                                    st.success("¡Imagen guardada!")
+                                    if f"active_b64_{row_key}" in st.session_state:
+                                        del st.session_state[f"active_b64_{row_key}"]
+                                    st.success("¡Imagen guardada con éxito!")
                                     st.cache_data.clear()
                                     st.rerun()
                                 except Exception as ex_f:
-                                    st.error(f"Error al guardar: {ex_f}")
+                                    st.error(f"Error al guardar en Supabase: {ex_f}")
                             else:
                                 st.warning("Haz clic en el recuadro y presiona Ctrl + V primero.")
                 
