@@ -601,11 +601,11 @@ with tab_cuentas:
                 st.progress(pct_drawdown, text=f"{pct_drawdown*100:.1f}% consumido (${p_diaria_act:,.2f} / ${p_diaria_max:,.2f})")
 
 # =============================================================================
-# TAB 4: HISTORIAL DE OPERACIONES (CONSOLIDADOS DIARIOS POR CUENTA)
+# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & ANALYTICS VISUAL
 # =============================================================================
 with tab_trades:
-    st.subheader("📖 Historial de Operaciones Diarias")
-    st.caption("Resumen consolidado por fecha y cuenta (Win: > +0.10% | BE: -0.10% a +0.10% | Loss: < -0.10%).")
+    st.subheader("📖 Historial & Distribución de Operaciones Diarias")
+    st.caption("Análisis consolidado por fecha y cuenta (Win: > +0.10% | BE: -0.10% a +0.10% | Loss: < -0.10%).")
     
     if df_ops.empty:
         st.info("No hay operaciones para la selección de cuentas actual.")
@@ -619,11 +619,10 @@ with tab_trades:
         
         df_diario = df_ops_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"])["resultado"].sum().reset_index()
         
-        # Calcular rentabilidad % sobre balance inicial
+        # Calcular % sobre balance inicial
         df_diario["balance_inicial"] = df_diario["acc_id_str"].map(map_bal_inicial)
         df_diario["pct_rendimiento"] = (df_diario["resultado"] / df_diario["balance_inicial"]) * 100.0
         
-        # Regla del usuario: >0.10% Win, entre -0.10% y +0.10% BE, <-0.10% Loss
         def clasificar_resultado(pct):
             if pct > 0.10:
                 return "WIN"
@@ -634,7 +633,7 @@ with tab_trades:
                 
         df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar_resultado)
         
-        # --- FILTROS DE LA TAB 4 ---
+        # --- CONTROLES DE FILTRO ---
         col_f1, col_f2 = st.columns([2, 2])
         
         min_f = df_diario["fecha_dia"].min()
@@ -642,7 +641,7 @@ with tab_trades:
         
         with col_f1:
             rango_fechas = st.date_input(
-                "📅 Filtrar por Rango de Fechas:",
+                "📅 Rango de Fechas:",
                 value=(min_f, max_f),
                 min_value=min_f,
                 max_value=max_f
@@ -650,12 +649,12 @@ with tab_trades:
             
         with col_f2:
             filtro_estados = st.multiselect(
-                "🎯 Filtrar por Resultado:",
+                "🎯 Filtrar Resultado:",
                 options=["WIN", "LOSS", "BE"],
                 default=["WIN", "LOSS", "BE"]
             )
             
-        # Aplicar filtros
+        # Aplicar filtros al DataFrame
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
             f_start, f_end = rango_fechas[0], rango_fechas[1]
             df_filtered_tab4 = df_diario[(df_diario["fecha_dia"] >= f_start) & (df_diario["fecha_dia"] <= f_end)]
@@ -665,13 +664,77 @@ with tab_trades:
         if filtro_estados:
             df_filtered_tab4 = df_filtered_tab4[df_filtered_tab4["clasificacion"].isin(filtro_estados)]
             
-        # Ordenar por fecha más reciente
         df_filtered_tab4 = df_filtered_tab4.sort_values("fecha_dia", ascending=False)
         
-        # Vista de tabla limpia
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # --- SECCIÓN GRÁFICA SUPERIOR ---
         if df_filtered_tab4.empty:
             st.info("No hay registros que coincidan con los filtros aplicados.")
         else:
+            chart_col1, chart_col2 = st.columns([1, 1])
+            
+            with chart_col1:
+                # 1. Gráfico Horizontal: Distribución por Cuenta
+                acc_stats = df_filtered_tab4.groupby(["nombre_cuenta", "clasificacion"]).size().reset_index(name="cantidad")
+                acc_totals = acc_stats.groupby("nombre_cuenta")["cantidad"].sum().reset_index(name="total_cuenta")
+                acc_stats = pd.merge(acc_stats, acc_totals, on="nombre_cuenta")
+                acc_stats["pct_cuenta"] = (acc_stats["cantidad"] / acc_stats["total_cuenta"]) * 100.0
+                
+                fig_hbar = px.bar(
+                    acc_stats,
+                    y="nombre_cuenta",
+                    x="pct_cuenta",
+                    color="clasificacion",
+                    orientation='h',
+                    title="<b>Distribución Win / Loss / BE por Cuenta (%)</b>",
+                    color_discrete_map={'WIN': '#26A69A', 'LOSS': '#EF5350', 'BE': '#787B86'},
+                    text=acc_stats['pct_cuenta'].apply(lambda x: f"{x:.0f}%")
+                )
+                fig_hbar.update_layout(
+                    barmode='stack',
+                    paper_bgcolor='#1A1E29',
+                    plot_bgcolor='#1A1E29',
+                    font=dict(color='#E0E3EB'),
+                    xaxis=dict(title="% del Total de Días Operados", gridcolor='#282D3C', range=[0, 100]),
+                    yaxis=dict(title="", gridcolor='#282D3C'),
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=330,
+                    showlegend=True
+                )
+                st.plotly_chart(fig_hbar, use_container_width=True)
+                
+            with chart_col2:
+                # 2. Gráfico Donut: Totales del Periodo Filtrado
+                tot_counts = df_filtered_tab4["clasificacion"].value_counts().reset_index()
+                tot_counts.columns = ["clasificacion", "cantidad"]
+                
+                color_map = {'WIN': '#26A69A', 'LOSS': '#EF5350', 'BE': '#787B86'}
+                tot_counts['color'] = tot_counts['clasificacion'].map(color_map)
+                
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=tot_counts['clasificacion'],
+                    values=tot_counts['cantidad'],
+                    hole=.5,
+                    marker=dict(colors=tot_counts['color']),
+                    textinfo='label+percent+value',
+                    hovertemplate="%{label}: %{value} días (%{percent})<extra></extra>"
+                )])
+                fig_pie.update_layout(
+                    title="<b>Total Periodo Filtrado (Días & %)</b>",
+                    paper_bgcolor='#1A1E29',
+                    font=dict(color='#E0E3EB'),
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=330,
+                    showlegend=True
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+            st.divider()
+            
+            # --- TABLA DE DETALLE DIARIO ---
+            st.subheader("📋 Detalle de Sesiones Diarias")
+            
             df_tab4_view = pd.DataFrame({
                 "Fecha": df_filtered_tab4["fecha_dia"].astype(str),
                 "Cuenta": df_filtered_tab4["nombre_cuenta"],
@@ -683,7 +746,5 @@ with tab_trades:
                 )
             })
             
-            # Limpieza final de string
             df_tab4_view["Estado"] = df_tab4_view["Estado"].str.replace("ffffff ", "")
-            
-            st.dataframe(df_tab4_view, use_container_width=True, height=450)
+            st.dataframe(df_tab4_view, use_container_width=True, height=400)
