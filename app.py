@@ -18,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados para integrar desplegables de forma totalmente transparente
+# Estilos CSS avanzados
 st.markdown("""
 <style>
     :root {
@@ -70,7 +70,7 @@ st.markdown("""
         font-weight: 500 !important;
     }
     
-    /* Quitar bordes y cajas al expander de la barra lateral */
+    /* Estilos del desplegable de subcuentas en la barra lateral */
     .stSidebar div[data-testid="stExpander"] {
         border: none !important;
         background-color: transparent !important;
@@ -92,8 +92,6 @@ st.markdown("""
     .stSidebar div[data-testid="stExpander"] summary:hover {
         color: #2962FF !important;
     }
-    
-    /* Sangría suave para sub-cuentas */
     .stSidebar div[data-testid="stExpander"] div[data-testid="stStyleContainer"],
     .stSidebar div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
         padding-left: 14px !important;
@@ -161,7 +159,7 @@ def cargar_datos():
 cuentas_raw, ops_raw = cargar_datos()
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / LISTA INTEGRA CON PADRES E HIJOS
+# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE DE CUENTAS
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade Platform")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -219,12 +217,11 @@ if cuentas_raw:
             if st.sidebar.checkbox(label, value=st.session_state[key], key=key):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
-            # Múltiples cuentas (ej. Orion Funded Nova)
+            # Múltiples cuentas
             child_ids = [str(a["account_number"]) for a in lista_accs]
             tot_bal_grp = sum([a["balance"] for a in lista_accs])
             master_key = f"master_{nombre_grp}"
             
-            # Inicialización de estados de hijos e hijas
             for cid in child_ids:
                 if f"chk_{cid}" not in st.session_state:
                     st.session_state[f"chk_{cid}"] = True
@@ -232,7 +229,6 @@ if cuentas_raw:
             if master_key not in st.session_state:
                 st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", True) for cid in child_ids)
 
-            # Funciones de callback para sincronizar padre e hijos
             def make_callbacks(grp_k=master_key, c_ids=child_ids):
                 def on_m_change():
                     m_val = st.session_state[grp_k]
@@ -244,7 +240,6 @@ if cuentas_raw:
 
             cb_master, cb_child = make_callbacks()
 
-            # 1. Checkbox Principal del Grupo (Alineado con el resto de la lista)
             master_label = f"{nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}"
             st.sidebar.checkbox(
                 master_label, 
@@ -253,7 +248,6 @@ if cuentas_raw:
                 on_change=cb_master
             )
             
-            # 2. Desplegable transparente para las sub-cuentas
             with st.sidebar.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=True):
                 for acc in lista_accs:
                     acc_id = str(acc["account_number"])
@@ -381,7 +375,6 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
     
-    # Selectores de Mes y Año
     now = datetime.datetime.now()
     c_m, c_y = st.columns([1, 1])
     with c_m:
@@ -389,7 +382,6 @@ with tab_calendar:
     with c_y:
         ano_sel = st.number_input("Año:", min_value=2024, max_value=2030, value=now.year)
         
-    # Agrupar PnL por día
     daily_stats = {}
     if not df_ops.empty:
         df_mes = df_ops[(df_ops['fecha_dt'].dt.month == mes_sel) & (df_ops['fecha_dt'].dt.year == ano_sel)]
@@ -405,8 +397,7 @@ with tab_calendar:
                     'win_rate': wr_val
                 }
 
-    # Construcción del Calendario HTML
-    cal_obj = calendar.Calendar(firstweekday=6) # Inicio en Domingo
+    cal_obj = calendar.Calendar(firstweekday=6)
     month_weeks = cal_obj.monthdayscalendar(int(ano_sel), int(mes_sel))
     
     css_cal = """
@@ -454,10 +445,8 @@ with tab_calendar:
         week_pct = (week_pnl / tot_inicial * 100) if tot_inicial > 0 else 0
         pct_cls = "green" if week_pnl > 0 else ("red" if week_pnl < 0 else "neutral")
         
-        # Tarjeta Semanal
         html_grid += f"<div class='week-summary-card'><div><span class='week-title'>Week {w_idx}</span><span class='week-pct {pct_cls}'>{week_pct:+.2f}%</span></div><div class='week-val'>${week_pnl:,.2f}</div></div>"
         
-        # Tarjetas Diarias
         for day in week:
             if day == 0:
                 html_grid += "<div class='day-box empty-day'></div>"
@@ -490,10 +479,8 @@ with tab_calendar:
                     
     html_grid += "</div></div>"
     
-    # Renderizado iFrame
     components.html(html_grid, height=620, scrolling=True)
     
-    # Métricas del mes
     mc1, mc2, mc3 = st.columns(3)
     mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}")
     mc2.metric("Días Verdes (Win)", f"{dias_ganadores} días")
@@ -614,24 +601,89 @@ with tab_cuentas:
                 st.progress(pct_drawdown, text=f"{pct_drawdown*100:.1f}% consumido (${p_diaria_act:,.2f} / ${p_diaria_max:,.2f})")
 
 # =============================================================================
-# TAB 4: HISTORIAL DE OPERACIONES
+# TAB 4: HISTORIAL DE OPERACIONES (CONSOLIDADOS DIARIOS POR CUENTA)
 # =============================================================================
 with tab_trades:
-    st.subheader("📖 Registro de Operaciones (Trade Log)")
+    st.subheader("📖 Historial de Operaciones Diarias")
+    st.caption("Resumen consolidado por fecha y cuenta (Win: > +0.10% | BE: -0.10% a +0.10% | Loss: < -0.10%).")
     
     if df_ops.empty:
-        st.info("No hay operaciones para la selección actual.")
+        st.info("No hay operaciones para la selección de cuentas actual.")
     else:
-        df_view = pd.DataFrame({
-            "Fecha": pd.to_datetime(df_ops["fecha"]).dt.strftime('%Y-%m-%d %H:%M'),
-            "Cuenta": df_ops["nombre_cuenta"],
-            "ID Cuenta": df_ops["account_number"],
-            "Símbolo": df_ops["simbolo"],
-            "Tipo": df_ops["tipo"],
-            "Resultado ($)": df_ops["resultado"].apply(lambda x: f"${x:,.2f}"),
-            "% Rendimiento": df_ops["porcentaje_base"].apply(lambda x: f"{x:+.2f}%"),
-            "Estado": df_ops["win_loss"].apply(lambda x: "🟩 WIN" if x=="WIN" else ("cd 🟥 LOSS" if x=="LOSS" else "⚪ BE")),
-            "Comentario MT5": df_ops["comentario"]
-        })
+        # Mapa de capital inicial
+        map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_raw} if cuentas_raw else {}
         
-        st.dataframe(df_view, use_container_width=True, height=450)
+        # Copia y agrupación por día + cuenta
+        df_ops_copy = df_ops.copy()
+        df_ops_copy["acc_id_str"] = df_ops_copy["account_number"].astype(str)
+        
+        df_diario = df_ops_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"])["resultado"].sum().reset_index()
+        
+        # Calcular rentabilidad % sobre balance inicial
+        df_diario["balance_inicial"] = df_diario["acc_id_str"].map(map_bal_inicial)
+        df_diario["pct_rendimiento"] = (df_diario["resultado"] / df_diario["balance_inicial"]) * 100.0
+        
+        # Regla del usuario: >0.10% Win, entre -0.10% y +0.10% BE, <-0.10% Loss
+        def clasificar_resultado(pct):
+            if pct > 0.10:
+                return "WIN"
+            elif pct < -0.10:
+                return "LOSS"
+            else:
+                return "BE"
+                
+        df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar_resultado)
+        
+        # --- FILTROS DE LA TAB 4 ---
+        col_f1, col_f2 = st.columns([2, 2])
+        
+        min_f = df_diario["fecha_dia"].min()
+        max_f = df_diario["fecha_dia"].max()
+        
+        with col_f1:
+            rango_fechas = st.date_input(
+                "📅 Filtrar por Rango de Fechas:",
+                value=(min_f, max_f),
+                min_value=min_f,
+                max_value=max_f
+            )
+            
+        with col_f2:
+            filtro_estados = st.multiselect(
+                "🎯 Filtrar por Resultado:",
+                options=["WIN", "LOSS", "BE"],
+                default=["WIN", "LOSS", "BE"]
+            )
+            
+        # Aplicar filtros
+        if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
+            f_start, f_end = rango_fechas[0], rango_fechas[1]
+            df_filtered_tab4 = df_diario[(df_diario["fecha_dia"] >= f_start) & (df_diario["fecha_dia"] <= f_end)]
+        else:
+            df_filtered_tab4 = df_diario.copy()
+            
+        if filtro_estados:
+            df_filtered_tab4 = df_filtered_tab4[df_filtered_tab4["clasificacion"].isin(filtro_estados)]
+            
+        # Ordenar por fecha más reciente
+        df_filtered_tab4 = df_filtered_tab4.sort_values("fecha_dia", ascending=False)
+        
+        # Vista de tabla limpia
+        if df_filtered_tab4.empty:
+            st.info("No hay registros que coincidan con los filtros aplicados.")
+        else:
+            df_tab4_view = pd.DataFrame({
+                "Fecha": df_filtered_tab4["fecha_dia"].astype(str),
+                "Cuenta": df_filtered_tab4["nombre_cuenta"],
+                "ID Cuenta": df_filtered_tab4["acc_id_str"],
+                "Resultado Final ($)": df_filtered_tab4["resultado"].apply(lambda x: f"${x:,.2f}"),
+                "% Rendimiento": df_filtered_tab4["pct_rendimiento"].apply(lambda x: f"{x:+.2f}%"),
+                "Estado": df_filtered_tab4["clasificacion"].apply(
+                    lambda x: "🟩 WIN" if x == "WIN" else ("ffffff 🟥 LOSS" if x == "LOSS" else "⚪ BE")
+                )
+            })
+            
+            # Limpieza final de string
+            df_tab4_view["Estado"] = df_tab4_view["Estado"].str.replace("ffffff ", "")
+            
+            st.dataframe(df_tab4_view, use_container_width=True, height=450)
