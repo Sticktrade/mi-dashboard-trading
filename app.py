@@ -6,6 +6,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import calendar
 import datetime
+import json
+import base64
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
@@ -132,11 +134,25 @@ st.markdown("""
     .green-text { color: #26A69A; }
     .red-text { color: #EF5350; }
     .blue-text { color: #2962FF; }
+
+    /* Tarjeta de Capturas */
+    .screenshot-card {
+        background-color: #1A1E29;
+        border: 1px solid #282D3C;
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+        transition: transform 0.2s, border-color 0.2s;
+    }
+    .screenshot-card:hover {
+        border-color: #2962FF;
+        transform: translateY(-2px);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 2. CONEXIÓN A SUPABASE
+# 2. CONEXIÓN A SUPABASE Y FUNCIONES AUXILIARES
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def init_supabase():
@@ -157,6 +173,26 @@ def cargar_datos():
     return res_cuentas.data, res_ops.data
 
 cuentas_raw, ops_raw = cargar_datos()
+
+def parse_capturas(capturas_data):
+    if not capturas_data:
+        return []
+    if isinstance(capturas_data, str):
+        try:
+            return json.loads(capturas_data)
+        except:
+            return []
+    elif isinstance(capturas_data, list):
+        return capturas_data
+    return []
+
+def file_to_base64(uploaded_file):
+    if uploaded_file is not None:
+        bytes_data = uploaded_file.getvalue()
+        b64 = base64.b64encode(bytes_data).decode('utf-8')
+        mime = uploaded_file.type if uploaded_file.type else 'image/png'
+        return f"data:{mime};base64,{b64}"
+    return None
 
 # -----------------------------------------------------------------------------
 # 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE DE CUENTAS
@@ -553,7 +589,7 @@ with tab_analytics:
         st.plotly_chart(fig_daily, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS (CON COLORES DINÁMICOS EN PROGRESS TEXT)
+# TAB 3: ESTADO DE CUENTAS
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -652,11 +688,11 @@ with tab_cuentas:
                 )
 
 # =============================================================================
-# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & ANALYTICS VISUAL
+# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & CAPTURAS ESTILO NOTION
 # =============================================================================
 with tab_trades:
-    st.subheader("📖 Historial & Distribución de Operaciones Diarias")
-    st.caption("Análisis consolidado por fecha y cuenta (Win: > +0.10% | BE: -0.10% a +0.10% | Loss: < -0.10%).")
+    st.subheader("📖 Historial, Analítica & Capturas de Operaciones")
+    st.caption("Monitorea sesiones diarias y adjunta capturas gráficas (con soporte Ctrl+V o subidor) para cada trade.")
     
     if df_ops.empty:
         st.info("No hay operaciones para la selección de cuentas actual.")
@@ -789,4 +825,234 @@ with tab_trades:
             })
             
             df_tab4_view["Estado"] = df_tab4_view["Estado"].str.replace("ffffff ", "")
-            st.dataframe(df_tab4_view, use_container_width=True, height=400)
+            st.dataframe(df_tab4_view, use_container_width=True, height=280)
+            
+            st.divider()
+
+            # -----------------------------------------------------------------
+            # SECCIÓN DE CAPTURAS DE PANTALLA ESTILO NOTION
+            # -----------------------------------------------------------------
+            st.subheader("📸 Galería de Capturas & Análisis de Trades")
+            st.caption("Selecciona una operación de la lista para gestionar o subir sus capturas de gráfico (hasta 2 o más capturas por operación).")
+
+            # Mapeo de opciones para el selector de trade
+            df_ops_select = df_ops_copy.sort_values("fecha_dt", ascending=False).copy()
+            
+            def make_op_label(row):
+                f_str = row['fecha_dt'].strftime('%Y-%m-%d %H:%M')
+                acc_name = row['nombre_cuenta']
+                res = row['resultado']
+                res_str = f"+${res:,.2f}" if res >= 0 else f"-${abs(res):,.2f}"
+                wl = row.get('win_loss', 'N/A')
+                return f"[{f_str}] {acc_name} (#{row['account_number']}) — {res_str} ({wl})"
+
+            ops_list = df_ops_select.to_dict('records')
+            
+            if ops_list:
+                op_opciones = {make_op_label(r): r for r in ops_list}
+                sel_label = st.selectbox(
+                    "🎯 Selecciona una Operación para Ver/Adjuntar Capturas:", 
+                    options=list(op_opciones.keys()),
+                    key="sb_select_trade_for_screenshots"
+                )
+                
+                selected_op = op_opciones[sel_label]
+                op_id = selected_op["id"]
+                
+                # Cargar capturas actuales de la operación
+                raw_capturas = selected_op.get("capturas", [])
+                list_capturas = parse_capturas(raw_capturas)
+                
+                # Encabezado del trade seleccionado
+                res_val = selected_op['resultado']
+                res_color = "green-text" if res_val >= 0 else "red-text"
+                
+                st.markdown(f"""
+                <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-size: 18px; font-weight: 800; color: #FFFFFF;">Operación #{selected_op.get('account_number')} — {selected_op.get('nombre_cuenta')}</span>
+                            <br><span style="color: #787B86; font-size: 13px;">Fecha: {selected_op.get('fecha')} | Estado: {selected_op.get('win_loss')}</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <span class="{res_color}" style="font-size: 22px; font-weight: 800;">{res_val:+,.2f} USD</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # --- VISUALIZACIÓN DE CAPTURAS EXISTENTES ---
+                st.markdown(f"#### 🖼️ Capturas Guardadas ({len(list_capturas)} subidas)")
+                
+                if list_capturas:
+                    cols = st.columns(min(len(list_capturas), 3))
+                    for idx, cap in enumerate(list_capturas):
+                        col_target = cols[idx % 3]
+                        with col_target:
+                            st.markdown(f"**Captura {idx + 1}: {cap.get('tipo', 'Gráfico')}**")
+                            img_data = cap.get("url") or cap.get("base64")
+                            if img_data:
+                                st.image(img_data, use_container_width=True)
+                                
+                                c_b1, c_b2 = st.columns([2, 1])
+                                with c_b1:
+                                    if st.button(f"🔍 Ver en Grande #{idx+1}", key=f"btn_zoom_{op_id}_{idx}", use_container_width=True):
+                                        st.session_state[f"active_zoom_{op_id}"] = cap
+                                with c_b2:
+                                    if st.button(f"🗑️", key=f"btn_del_{op_id}_{idx}", help="Eliminar captura", use_container_width=True):
+                                        list_capturas.pop(idx)
+                                        try:
+                                            supabase.table("operaciones").update({"capturas": json.dumps(list_capturas)}).eq("id", op_id).execute()
+                                            st.success("Captura eliminada.")
+                                            st.cache_data.clear()
+                                            st.rerun()
+                                        except Exception as err:
+                                            st.error(f"Error al eliminar: {err}")
+                else:
+                    st.info("Esta operación aún no tiene capturas de pantalla adjuntas.")
+
+                # Modal / Vista Ampliada estilo Notion
+                zoom_cap = st.session_state.get(f"active_zoom_{op_id}")
+                if zoom_cap:
+                    st.markdown("---")
+                    st.markdown("### 🔍 Vista Detallada de la Captura (Estilo Notion)")
+                    
+                    z_col1, z_col2 = st.columns([3, 1])
+                    with z_col1:
+                        st.image(zoom_cap.get("url") or zoom_cap.get("base64"), use_container_width=True, caption=f"Tipo: {zoom_cap.get('tipo')} | Subida: {zoom_cap.get('fecha_subida', 'N/A')}")
+                    with z_col2:
+                        st.markdown(f"""
+                        <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 10px; padding: 14px;">
+                            <h4 style="margin-top:0; color:#2962FF;">Detalles del Trade</h4>
+                            <p><b>Cuenta:</b> {selected_op.get('nombre_cuenta')}</p>
+                            <p><b>ID Cuenta:</b> #{selected_op.get('account_number')}</p>
+                            <p><b>Fecha:</b> {selected_op.get('fecha')}</p>
+                            <p><b>Resultado:</b> <span class="{res_color}">${res_val:,.2f}</span></p>
+                            <p><b>Tipo Captura:</b> {zoom_cap.get('tipo')}</p>
+                            <p><b>Notas/Observación:</b> {zoom_cap.get('nota', 'Sin notas adicionales')}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        if st.button("❌ Cerrar Vista Ampliada", key=f"close_zoom_{op_id}", use_container_width=True):
+                            del st.session_state[f"active_zoom_{op_id}"]
+                            st.rerun()
+
+                st.markdown("---")
+                st.markdown("#### 📤 Añadir Nueva Captura (Soporta `Ctrl + V` y Archivos)")
+                
+                tab_up1, tab_up2 = st.tabs(["📋 Pegar Imagen (Ctrl + V)", "📁 Subir Archivo (Drag & Drop)"])
+                
+                # --- MÉTODO 1: PEGAR CON CTRL + V ---
+                with tab_up1:
+                    st.caption("Instrucciones: Toma una captura (Win+Shift+S o PrtScn), haz clic en el cuadro de abajo y presiona **Ctrl + V**. ¡La imagen se pegará en tiempo real!")
+                    
+                    html_paste_box = f"""
+                    <div id="paste-container" style="
+                        background-color: #1A1E29; 
+                        border: 2px dashed #2962FF; 
+                        border-radius: 10px; 
+                        padding: 24px; 
+                        text-align: center; 
+                        color: #E0E3EB; 
+                        cursor: pointer;
+                        transition: all 0.2s ease;">
+                        <p style="font-size: 16px; font-weight: 700; margin: 0; color: #2962FF;">
+                            📋 HAZ CLIC AQUÍ Y PRESIONA CTRL + V
+                        </p>
+                        <p style="font-size: 12px; color: #787B86; margin-top: 6px;">
+                            Pega directamente la captura del gráfico tomada de TradingView, MetaTrader o tu pantalla.
+                        </p>
+                        <img id="paste-preview" style="max-width: 100%; max-height: 250px; display: none; margin-top: 12px; border-radius: 8px; border: 1px solid #282D3C;" />
+                    </div>
+
+                    <script>
+                        const container = document.getElementById('paste-container');
+                        const preview = document.getElementById('paste-preview');
+
+                        container.addEventListener('click', () => {{
+                            container.style.borderColor = '#26A69A';
+                        }});
+
+                        window.addEventListener('paste', (e) => {{
+                            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                            for (let item of items) {{
+                                if (item.kind === 'file' && item.type.startsWith('image/')) {{
+                                    const blob = item.getAsFile();
+                                    const reader = new FileReader();
+                                    reader.onload = function(event) {{
+                                        const b64Data = event.target.result;
+                                        preview.src = b64Data;
+                                        preview.style.display = 'block';
+                                        
+                                        navigator.clipboard.writeText(b64Data).then(() => {{
+                                            container.innerHTML += '<p style="color:#26A69A; font-weight:bold; margin-top:8px;">¡Imagen capturada! Pégala abajo o usa la confirmación directa.</p>';
+                                        }}).catch(err => {{}});
+                                        
+                                        let txtInput = parent.document.querySelector('textarea[aria-label="pasted_b64_field"]');
+                                        if(txtInput) {{
+                                            txtInput.value = b64Data;
+                                            txtInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                        }}
+                                    }};
+                                    reader.readAsDataURL(blob);
+                                }}
+                            }}
+                        }});
+                    </script>
+                    """
+                    components.html(html_paste_box, height=260)
+                    
+                    col_p1, col_p2 = st.columns([2, 1])
+                    with col_p1:
+                        tipo_cap_paste = st.selectbox("Etiqueta / Tipo de Captura:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"tipo_p_{op_id}")
+                        nota_paste = st.text_input("Nota breve u observación:", placeholder="Ej: Falsa ruptura en horario de NY con divergencia", key=f"nota_p_{op_id}")
+                    with col_p2:
+                        pasted_b64 = st.text_area("Código de Imagen Pegada (Ctrl + V):", help="Si pegaste la captura arriba, presiona Ctrl + V en esta caja para confirmar la imagen.", key=f"pasted_area_{op_id}", height=100)
+
+                    if st.button("💾 Guardar Captura Pegada", key=f"save_paste_{op_id}", use_container_width=True):
+                        if pasted_b64 and len(pasted_b64) > 50:
+                            nueva_cap = {
+                                "tipo": tipo_cap_paste,
+                                "nota": nota_paste,
+                                "url": pasted_b64.strip(),
+                                "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                            }
+                            list_capturas.append(nueva_cap)
+                            try:
+                                supabase.table("operaciones").update({"capturas": json.dumps(list_capturas)}).eq("id", op_id).execute()
+                                st.success("¡Captura pegada guardada exitosamente!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Error al guardar en la base de datos: {ex}")
+                        else:
+                            st.warning("Por favor pega la captura en la caja de confirmación (Ctrl + V).")
+
+                # --- MÉTODO 2: SUBIDOR TRADICIONAL DE ARCHIVOS ---
+                with tab_up2:
+                    up_file = st.file_uploader("Selecciona una imagen desde tu equipo (PNG, JPG, WEBP):", type=["png", "jpg", "jpeg", "webp"], key=f"file_up_{op_id}")
+                    col_u1, col_u2 = st.columns(2)
+                    with col_u1:
+                        tipo_cap_file = st.selectbox("Etiqueta de la Imagen:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"tipo_f_{op_id}")
+                    with col_u2:
+                        nota_file = st.text_input("Nota breve u observación:", placeholder="Ej: Setup perfecto en zona de demanda", key=f"nota_f_{op_id}")
+
+                    if st.button("💾 Subir y Guardar Archivo", key=f"save_file_{op_id}", use_container_width=True):
+                        if up_file is not None:
+                            b64_str = file_to_base64(up_file)
+                            if b64_str:
+                                nueva_cap = {
+                                    "tipo": tipo_cap_file,
+                                    "nota": nota_file,
+                                    "url": b64_str,
+                                    "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                }
+                                list_capturas.append(nueva_cap)
+                                try:
+                                    supabase.table("operaciones").update({"capturas": json.dumps(list_capturas)}).eq("id", op_id).execute()
+                                    st.success("¡Imagen subida y guardada exitosamente!")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as ex:
+                                    st.error(f"Error al guardar en Supabase: {ex}")
+                        else:
+                            st.warning("Por favor selecciona un archivo de imagen antes de guardar.")
