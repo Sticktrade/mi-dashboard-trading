@@ -18,10 +18,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados
+# Estilos CSS avanzados para integrar desplegables de forma totalmente transparente
 st.markdown("""
 <style>
-    /* Forzar variable de color primario a Azul TradingView */
     :root {
         --primary-color: #2962FF !important;
     }
@@ -32,7 +31,7 @@ st.markdown("""
         color: #E0E3EB;
     }
     
-    /* Pestañas (Tabs) - Texto Inactivo y Activo */
+    /* Pestañas (Tabs) */
     button[data-baseweb="tab"] {
         color: #787B86 !important;
         font-weight: 600 !important;
@@ -40,8 +39,6 @@ st.markdown("""
     button[data-baseweb="tab"][aria-selected="true"] {
         color: #2962FF !important;
     }
-    
-    /* Línea resaltada inferior de la Pestaña Activa */
     div[data-baseweb="tab-highlight"] {
         background-color: #2962FF !important;
     }
@@ -49,41 +46,57 @@ st.markdown("""
         background-color: #282D3C !important;
     }
     
-    /* Estilo de los Checkboxes de Selección de Cuentas */
+    /* Checkboxes */
     div[data-baseweb="checkbox"] {
-        margin-bottom: 6px;
-        padding: 4px 6px;
+        margin-bottom: 4px;
+        padding: 2px 4px;
         border-radius: 6px;
         transition: background-color 0.2s;
     }
     div[data-baseweb="checkbox"]:hover {
         background-color: #1A1E29;
     }
-    
-    /* Cuadro de Check activo en Azul */
     div[data-baseweb="checkbox"] input:checked + div,
     div[role="checkbox"][aria-checked="true"] {
         background-color: #2962FF !important;
         border-color: #2962FF !important;
     }
-    
-    /* Icono del check interno */
     div[data-baseweb="checkbox"] svg {
         fill: #FFFFFF !important;
     }
-    
     div[data-baseweb="checkbox"] span {
         color: #E0E3EB !important;
         font-size: 13px !important;
         font-weight: 500 !important;
     }
     
-    /* Estilo para los despliegues de grupos de cuentas */
-    .stSidebar .stExpander {
-        border: 1px solid #282D3C !important;
-        border-radius: 8px !important;
-        background-color: #1A1E29 !important;
-        margin-bottom: 10px !important;
+    /* Quitar bordes y cajas al expander de la barra lateral */
+    .stSidebar div[data-testid="stExpander"] {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        margin-top: -6px !important;
+        margin-bottom: 8px !important;
+    }
+    .stSidebar div[data-testid="stExpander"] details {
+        border: none !important;
+        background-color: transparent !important;
+    }
+    .stSidebar div[data-testid="stExpander"] summary {
+        background-color: transparent !important;
+        border: none !important;
+        padding: 2px 6px !important;
+        color: #787B86 !important;
+        font-size: 12px !important;
+    }
+    .stSidebar div[data-testid="stExpander"] summary:hover {
+        color: #2962FF !important;
+    }
+    
+    /* Sangría suave para sub-cuentas */
+    .stSidebar div[data-testid="stExpander"] div[data-testid="stStyleContainer"],
+    .stSidebar div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
+        padding-left: 14px !important;
     }
     
     /* Botones */
@@ -106,7 +119,6 @@ st.markdown("""
         padding: 16px;
         margin-bottom: 12px;
     }
-    
     .metric-title {
         color: #787B86;
         font-size: 12px;
@@ -114,13 +126,11 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    
     .metric-value {
         font-size: 24px;
         font-weight: 800;
         margin-top: 4px;
     }
-    
     .green-text { color: #26A69A; }
     .red-text { color: #EF5350; }
     .blue-text { color: #2962FF; }
@@ -151,7 +161,7 @@ def cargar_datos():
 cuentas_raw, ops_raw = cargar_datos()
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN DESPLEGABLE DE CUENTAS
+# 3. BARRA LATERAL / LISTA INTEGRA CON PADRES E HIJOS
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade Platform")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -164,7 +174,7 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
 
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
-# Agrupar cuentas por nombre de empresa/prop firm
+# Agrupar cuentas por empresa/nombre
 grupos_cuentas = {}
 if cuentas_raw:
     for c in cuentas_raw:
@@ -173,28 +183,32 @@ if cuentas_raw:
             grupos_cuentas[nombre] = []
         grupos_cuentas[nombre].append(c)
 
+# Botones rápidos
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
     if cuentas_raw:
         for c in cuentas_raw:
             st.session_state[f"chk_{c['account_number']}"] = True
+        for grp_n in grupos_cuentas.keys():
+            st.session_state[f"master_{grp_n}"] = True
         st.rerun()
 
 if col_b2.button("Ninguna", use_container_width=True):
     if cuentas_raw:
         for c in cuentas_raw:
             st.session_state[f"chk_{c['account_number']}"] = False
+        for grp_n in grupos_cuentas.keys():
+            st.session_state[f"master_{grp_n}"] = False
         st.rerun()
 
 st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
-# Generar lista inteligente con desplegables para múltiples cuentas
 cuentas_seleccionadas_ids = []
 
 if cuentas_raw:
     for nombre_grp, lista_accs in grupos_cuentas.items():
         if len(lista_accs) == 1:
-            # Cuenta única de este tipo
+            # Cuenta única
             acc = lista_accs[0]
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
@@ -205,22 +219,59 @@ if cuentas_raw:
             if st.sidebar.checkbox(label, value=st.session_state[key], key=key):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
-            # Múltiples cuentas con el mismo nombre -> Desplegable Expander
+            # Múltiples cuentas (ej. Orion Funded Nova)
+            child_ids = [str(a["account_number"]) for a in lista_accs]
             tot_bal_grp = sum([a["balance"] for a in lista_accs])
-            with st.sidebar.expander(f"📁 {nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}", expanded=True):
+            master_key = f"master_{nombre_grp}"
+            
+            # Inicialización de estados de hijos e hijas
+            for cid in child_ids:
+                if f"chk_{cid}" not in st.session_state:
+                    st.session_state[f"chk_{cid}"] = True
+            
+            if master_key not in st.session_state:
+                st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", True) for cid in child_ids)
+
+            # Funciones de callback para sincronizar padre e hijos
+            def make_callbacks(grp_k=master_key, c_ids=child_ids):
+                def on_m_change():
+                    m_val = st.session_state[grp_k]
+                    for cid in c_ids:
+                        st.session_state[f"chk_{cid}"] = m_val
+                def on_c_change():
+                    st.session_state[grp_k] = all(st.session_state.get(f"chk_{cid}", True) for cid in c_ids)
+                return on_m_change, on_c_change
+
+            cb_master, cb_child = make_callbacks()
+
+            # 1. Checkbox Principal del Grupo (Alineado con el resto de la lista)
+            master_label = f"{nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}"
+            st.sidebar.checkbox(
+                master_label, 
+                value=st.session_state[master_key], 
+                key=master_key, 
+                on_change=cb_master
+            )
+            
+            # 2. Desplegable transparente para las sub-cuentas
+            with st.sidebar.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=True):
                 for acc in lista_accs:
                     acc_id = str(acc["account_number"])
-                    key = f"chk_{acc_id}"
-                    if key not in st.session_state:
-                        st.session_state[key] = True
-                        
-                    label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
-                    if st.checkbox(label, value=st.session_state[key], key=key):
+                    cid_key = f"chk_{acc_id}"
+                    
+                    child_label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
+                    if st.checkbox(
+                        child_label, 
+                        value=st.session_state[cid_key], 
+                        key=cid_key, 
+                        on_change=cb_child
+                    ):
                         cuentas_seleccionadas_ids.append(acc_id)
+
 else:
     st.sidebar.info("Cargando cuentas...")
 
-# Filtrar Cuentas y Operaciones por ID de cuenta único
+# Filtrar Cuentas y Operaciones
 if cuentas_seleccionadas_ids:
     cuentas = [c for c in cuentas_raw if str(c["account_number"]) in cuentas_seleccionadas_ids]
 else:
