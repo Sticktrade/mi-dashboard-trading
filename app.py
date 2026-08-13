@@ -20,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados
+# Estilos CSS avanzados estilo Notion Dark Mode
 st.markdown("""
 <style>
     :root {
@@ -131,20 +131,13 @@ st.markdown("""
         font-weight: 800;
         margin-top: 4px;
     }
-    .green-text { color: #26A69A; }
-    .red-text { color: #EF5350; }
+    .green-text { color: #26A69A; font-weight: 700; }
+    .red-text { color: #EF5350; font-weight: 700; }
     .blue-text { color: #2962FF; }
 
-    /* Estilos de Fila de Tabla Notion */
-    .trade-row-card {
-        background-color: #1A1E29;
-        border: 1px solid #282D3C;
-        border-radius: 8px;
-        padding: 10px 14px;
-        margin-bottom: 6px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+    /* Estilos para Alineación de Filas */
+    div[data-testid="stHorizontalBlock"] {
+        align-items: center !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -352,7 +345,7 @@ with kpi1:
     <div class="metric-card">
         <div class="metric-title">Capital Gestionado</div>
         <div class="metric-value">${tot_actual:,.2f}</div>
-        <div class="{color}" style="font-size:12px; font-weight:700;">{pct_global:+.2f}% (${tot_ganado:,.2f})</div>
+        <div class="{color}" style="font-size:12px;">{pct_global:+.2f}% (${tot_ganado:,.2f})</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -696,7 +689,7 @@ with tab_cuentas:
                 )
 
 # =============================================================================
-# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA INTERACTIVA NOTION CON CAPTURAS
+# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA ESTILO NOTION
 # =============================================================================
 with tab_trades:
     st.subheader("📖 Historial & Analítica de Operaciones")
@@ -710,7 +703,7 @@ with tab_trades:
         df_ops_copy = df_ops.copy()
         df_ops_copy["acc_id_str"] = df_ops_copy["account_number"].astype(str)
         
-        # Garantizar que las columnas existan antes del groupby para evitar KeyError
+        # Garantizar que las columnas existan antes del groupby
         if "capturas" not in df_ops_copy.columns:
             df_ops_copy["capturas"] = None
         if "resultado" not in df_ops_copy.columns:
@@ -831,22 +824,23 @@ with tab_trades:
             st.divider()
             
             # -----------------------------------------------------------------
-            # TABLA INTERACTIVA NOTION CON CAPTURAS INTEGRADAS EN CADA FILA
+            # TABLA LIMPIA EXACTA ESTILO NOTION (FILAS ALINEADAS POR COLUMNAS)
             # -----------------------------------------------------------------
-            st.subheader("📋 Detalle de Sesiones Diarias & Capturas")
-            st.caption("Haz clic en cualquier fila para desplegar sus capturas de pantalla, pegado directo (Ctrl + V) y notas técnicas.")
+            st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
+            st.caption("Tabla de historial alineada. Haz clic en el botón de estado de cualquier fila para abrir el panel flotante de capturas.")
             
             # Encabezado de la Tabla
-            hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([1.2, 1.8, 1.2, 1.5, 1.2, 1.5])
-            hdr_c1.markdown("**Fecha**")
-            hdr_c2.markdown("**Cuenta**")
-            hdr_c3.markdown("**ID Cuenta**")
-            hdr_c4.markdown("**Resultado ($)**")
-            hdr_c5.markdown("**% Rend.**")
-            hdr_c6.markdown("**Estado / Capturas**")
-            st.markdown("<hr style='margin: 4px 0 12px 0; border-color: #282D3C;'>", unsafe_allow_html=True)
+            hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
+            hdr_c1.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>FECHA</span>", unsafe_allow_html=True)
+            hdr_c2.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>CUENTA</span>", unsafe_allow_html=True)
+            hdr_c3.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ID CUENTA</span>", unsafe_allow_html=True)
+            hdr_c4.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>RESULTADO ($)</span>", unsafe_allow_html=True)
+            hdr_c5.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>% REND.</span>", unsafe_allow_html=True)
+            hdr_c6.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ESTADO / CAPTURAS</span>", unsafe_allow_html=True)
+            
+            st.markdown("<hr style='margin: 6px 0 10px 0; border-color: #282D3C;'>", unsafe_allow_html=True)
 
-            # Renderizado de Filas Interactivas
+            # Renderizado de Filas de la Tabla Estilo Notion
             list_sessions = df_filtered_tab4.to_dict("records")
             
             for idx, row in enumerate(list_sessions):
@@ -873,185 +867,174 @@ with tab_trades:
                 capturas_list = parse_capturas(op_row.get("capturas"))
                 num_caps = len(capturas_list)
                 
-                # Badge de Estado y PnL
+                # Formateo de Celdas
                 if clasif == "WIN":
-                    badge = "🟩 WIN"
-                    res_color_cls = "green-text"
-                    res_formatted = f"+${res_num:,.2f}"
-                    pct_formatted = f"+{pct_num:.2f}%"
+                    badge = f"🟩 WIN ({num_caps})"
+                    res_html = f"<span class='green-text'>+${res_num:,.2f}</span>"
+                    pct_html = f"<span class='green-text'>+{pct_num:.2f}%</span>"
                 elif clasif == "LOSS":
-                    badge = "🟥 LOSS"
-                    res_color_cls = "red-text"
-                    res_formatted = f"-${abs(res_num):,.2f}"
-                    pct_formatted = f"{pct_num:.2f}%"
+                    badge = f"🟥 LOSS ({num_caps})"
+                    res_html = f"<span class='red-text'>-${abs(res_num):,.2f}</span>"
+                    pct_html = f"<span class='red-text'>{pct_num:.2f}%</span>"
                 else:
-                    badge = "⚪ BE"
-                    res_color_cls = ""
-                    res_formatted = f"${res_num:,.2f}"
-                    pct_formatted = f"{pct_num:.2f}%"
+                    badge = f"⚪ BE ({num_caps})"
+                    res_html = f"<span>${res_num:,.2f}</span>"
+                    pct_html = f"<span>{pct_num:.2f}%</span>"
 
-                # Expander como Fila de Tabla
-                cap_icon_str = f"📸 {num_caps} capturas" if num_caps > 0 else "📸 Adjuntar"
-                exp_label = f"{f_str}  |  {acc_name}  |  #{acc_id_str}  |  {res_formatted}  |  {pct_formatted}  |  {badge} ({cap_icon_str})"
+                row_key = f"pop_{acc_id_str}_{f_str}_{idx}"
                 
-                row_key = f"exp_row_{acc_id_str}_{f_str}_{idx}"
+                # Renderizado estricto en columnas limpias
+                c1, c2, c3, c4, c5, c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
                 
-                with st.expander(exp_label, expanded=False):
-                    r_col1, r_col2 = st.columns([2, 1])
-                    with r_col1:
-                        st.markdown(f"#### 📊 Detalle de Sesión: {acc_name} (`#{acc_id_str}`)")
-                        st.write(f"**Fecha:** {f_str} | **Resultado:** <span class='{res_color_cls}'>**{res_formatted} ({pct_formatted})**</span>", unsafe_allow_html=True)
-                    with r_col2:
-                        st.caption(f"**Total Capturas Guardadas:** {num_caps}")
-
-                    st.markdown("---")
-                    
-                    # --- GALERÍA DE CAPTURAS DE LA FILA ---
-                    st.markdown("##### 🖼️ Capturas de Pantalla de la Operación")
-                    if capturas_list:
-                        grid_cols = st.columns(min(len(capturas_list), 3))
-                        for c_idx, cap in enumerate(capturas_list):
-                            col_target = grid_cols[c_idx % 3]
-                            with col_target:
-                                st.markdown(f"**Captura {c_idx+1}: {cap.get('tipo', 'Gráfico')}**")
-                                img_src = cap.get("url") or cap.get("base64")
-                                if img_src:
-                                    st.image(img_src, use_container_width=True)
-                                    
-                                    b_col1, b_col2 = st.columns([2, 1])
-                                    with b_col1:
-                                        if st.button(f"🔍 Ver en Grande", key=f"zoom_row_{row_key}_{c_idx}", use_container_width=True):
-                                            st.session_state[f"active_zoom_{row_key}"] = cap
-                                    with b_col2:
-                                        if st.button("🗑️", key=f"del_row_{row_key}_{c_idx}", help="Eliminar captura", use_container_width=True):
-                                            capturas_list.pop(c_idx)
-                                            try:
-                                                update_op_capturas(op_row, capturas_list)
-                                                st.success("Captura eliminada.")
-                                                st.cache_data.clear()
-                                                st.rerun()
-                                            except Exception as ex_del:
-                                                st.error(f"Error al eliminar: {ex_del}")
-                    else:
-                        st.info("Aún no has adjuntado capturas a esta sesión. ¡Sube o pega una abajo!")
-
-                    # Vista ampliada / Zoom modal para la fila
-                    zoom_data = st.session_state.get(f"active_zoom_{row_key}")
-                    if zoom_data:
+                with c1:
+                    st.markdown(f"<span style='font-size:13px;'>{f_str}</span>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"<span style='font-size:13px; font-weight:600;'>{acc_name}</span>", unsafe_allow_html=True)
+                with c3:
+                    st.markdown(f"<code style='background:#1A1E29; color:#A3A6AF; padding:2px 6px; border-radius:4px;'>#{acc_id_str}</code>", unsafe_allow_html=True)
+                with c4:
+                    st.markdown(res_html, unsafe_allow_html=True)
+                with c5:
+                    st.markdown(pct_html, unsafe_allow_html=True)
+                with c6:
+                    # Celda/Popover flotante exactamente estilo Notion
+                    with st.popover(badge, use_container_width=True):
+                        st.markdown(f"### 📊 Sesión: {acc_name} (`#{acc_id_str}`)")
+                        st.markdown(f"**Fecha:** `{f_str}` | **Resultado:** {res_html} ({pct_html})", unsafe_allow_html=True)
                         st.markdown("---")
-                        st.markdown("##### 🔍 Vista Ampliada (Detalle Estilo Notion)")
-                        z_c1, z_c2 = st.columns([3, 1])
-                        with z_c1:
+                        
+                        # --- GALERÍA DE CAPTURAS DENTRO DEL POPOVER ---
+                        st.markdown(f"##### 🖼️ Capturas de Pantalla ({num_caps})")
+                        if capturas_list:
+                            grid_cols = st.columns(min(len(capturas_list), 2))
+                            for c_idx, cap in enumerate(capturas_list):
+                                target_col = grid_cols[c_idx % 2]
+                                with target_col:
+                                    st.markdown(f"**Captura {c_idx+1}: {cap.get('tipo', 'Gráfico')}**")
+                                    img_src = cap.get("url") or cap.get("base64")
+                                    if img_src:
+                                        st.image(img_src, use_container_width=True)
+                                        
+                                        b_col1, b_col2 = st.columns([2, 1])
+                                        with b_col1:
+                                            if st.button(f"🔍 Zoom", key=f"zoom_pop_{row_key}_{c_idx}", use_container_width=True):
+                                                st.session_state[f"active_zoom_{row_key}"] = cap
+                                        with b_col2:
+                                            if st.button("🗑️", key=f"del_pop_{row_key}_{c_idx}", help="Eliminar captura", use_container_width=True):
+                                                capturas_list.pop(c_idx)
+                                                try:
+                                                    update_op_capturas(op_row, capturas_list)
+                                                    st.success("Captura eliminada.")
+                                                    st.cache_data.clear()
+                                                    st.rerun()
+                                                except Exception as ex_del:
+                                                    st.error(f"Error al eliminar: {ex_del}")
+                        else:
+                            st.info("No hay capturas adjuntas aún para esta sesión.")
+
+                        # Vista ampliada (Zoom) dentro del popover
+                        zoom_data = st.session_state.get(f"active_zoom_{row_key}")
+                        if zoom_data:
+                            st.markdown("---")
+                            st.markdown("##### 🔍 Detalle Ampliado")
                             st.image(zoom_data.get("url") or zoom_data.get("base64"), use_container_width=True)
-                        with z_c2:
-                            st.markdown(f"""
-                            <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 12px;">
-                                <p style="margin-top:0;"><b>Etiqueta:</b> {zoom_data.get('tipo')}</p>
-                                <p><b>Fecha Subida:</b> {zoom_data.get('fecha_subida', 'N/A')}</p>
-                                <p><b>Notas:</b> {zoom_data.get('nota', 'Sin observaciones')}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            if st.button("❌ Cerrar Vista", key=f"close_zoom_{row_key}", use_container_width=True):
+                            st.caption(f"**Etiqueta:** {zoom_data.get('tipo')} | **Notas:** {zoom_data.get('nota', 'Sin notas')}")
+                            if st.button("❌ Cerrar Zoom", key=f"close_zoom_pop_{row_key}", use_container_width=True):
                                 del st.session_state[f"active_zoom_{row_key}"]
                                 st.rerun()
 
-                    # --- ZONA PARA SUBIR O PEGAR CAPTURAS EN LA FILA ---
-                    st.markdown("---")
-                    st.markdown("##### 📤 Adjuntar Nueva Captura a esta Fila")
-                    
-                    t_up1, t_up2 = st.tabs(["📋 Pegar Imagen (Ctrl + V)", "📁 Subir Archivo"])
-                    
-                    with t_up1:
-                        st.caption("1. Copia tu captura (`Win + Shift + S` o PrtScn).<br>2. Haz clic en la casilla azul y presiona **Ctrl + V**.<br>3. Pega también el texto resultante en la caja de confirmación si se requiere.", unsafe_allow_html=True)
+                        # --- ZONA DE CARGA DENTRO DEL POPOVER ---
+                        st.markdown("---")
+                        st.markdown("##### 📤 Adjuntar Nueva Captura")
                         
-                        paste_html = f"""
-                        <div id="p-box-{idx}" style="
-                            background-color: #1A1E29; 
-                            border: 2px dashed #2962FF; 
-                            border-radius: 8px; 
-                            padding: 16px; 
-                            text-align: center; 
-                            color: #E0E3EB; 
-                            cursor: pointer;">
-                            <p style="font-size: 14px; font-weight: 700; margin: 0; color: #2962FF;">
-                                📋 CLIC AQUÍ Y PRESIONA CTRL + V
-                            </p>
-                            <img id="p-img-{idx}" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 6px;" />
-                        </div>
-                        <script>
-                            const pBox = document.getElementById('p-box-{idx}');
-                            const pImg = document.getElementById('p-img-{idx}');
+                        t_pop1, t_pop2 = st.tabs(["📋 Pegar Imagen (Ctrl + V)", "📁 Subir Archivo"])
+                        
+                        with t_pop1:
+                            st.caption("1. Copia tu gráfica (`Win + Shift + S` o PrtScn).<br>2. Haz clic abajo y presiona **Ctrl + V**.<br>3. Confirma el texto en la casilla.", unsafe_allow_html=True)
                             
-                            window.addEventListener('paste', (e) => {{
-                                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                                for (let item of items) {{
-                                    if (item.kind === 'file' && item.type.startsWith('image/')) {{
-                                        const blob = item.getAsFile();
-                                        const reader = new FileReader();
-                                        reader.onload = function(evt) {{
-                                            pImg.src = evt.target.result;
-                                            pImg.style.display = 'block';
-                                            navigator.clipboard.writeText(evt.target.result).then(() => {{}}).catch(() => {{}});
-                                        }};
-                                        reader.readAsDataURL(blob);
+                            paste_html = f"""
+                            <div id="p-box-{idx}" style="
+                                background-color: #1A1E29; 
+                                border: 2px dashed #2962FF; 
+                                border-radius: 8px; 
+                                padding: 12px; 
+                                text-align: center; 
+                                color: #E0E3EB; 
+                                cursor: pointer;">
+                                <p style="font-size: 13px; font-weight: 700; margin: 0; color: #2962FF;">
+                                    📋 CLIC AQUÍ Y PRESIONA CTRL + V
+                                </p>
+                                <img id="p-img-{idx}" style="max-width: 100%; max-height: 160px; display: none; margin-top: 8px; border-radius: 6px;" />
+                            </div>
+                            <script>
+                                const pImg_{idx} = document.getElementById('p-img-{idx}');
+                                window.addEventListener('paste', (e) => {{
+                                    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                                    for (let item of items) {{
+                                        if (item.kind === 'file' && item.type.startsWith('image/')) {{
+                                            const blob = item.getAsFile();
+                                            const reader = new FileReader();
+                                            reader.onload = function(evt) {{
+                                                pImg_{idx}.src = evt.target.result;
+                                                pImg_{idx}.style.display = 'block';
+                                                navigator.clipboard.writeText(evt.target.result).catch(() => {{}});
+                                            }};
+                                            reader.readAsDataURL(blob);
+                                        }}
                                     }}
-                                }}
-                            }});
-                        </script>
-                        """
-                        components.html(paste_html, height=200)
-                        
-                        col_paste_1, col_paste_2 = st.columns([2, 1])
-                        with col_paste_1:
-                            tipo_p = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_p_{row_key}")
-                            nota_p = st.text_input("Nota / Observación técnica:", placeholder="Ej: Ruptura de estructura con alto volumen", key=f"inp_nota_p_{row_key}")
-                        with col_paste_2:
-                            pasted_text = st.text_area("Confirmación de Pegado (Ctrl + V):", placeholder="Haz Ctrl + V aquí para confirmar la imagen...", key=f"pasted_txt_{row_key}", height=90)
+                                }});
+                            </script>
+                            """
+                            components.html(paste_html, height=180)
                             
-                        if st.button("💾 Guardar Captura Pegada", key=f"btn_save_p_{row_key}", use_container_width=True):
-                            if pasted_text and len(pasted_text.strip()) > 50:
-                                nueva_c = {
-                                    "tipo": tipo_p,
-                                    "nota": nota_p,
-                                    "url": pasted_text.strip(),
-                                    "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                                }
-                                capturas_list.append(nueva_c)
-                                try:
-                                    update_op_capturas(op_row, capturas_list)
-                                    st.success("¡Captura guardada en la fila correctamente!")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                                except Exception as ex_p:
-                                    st.error(f"Error al guardar: {ex_p}")
-                            else:
-                                st.warning("Por favor pega el código de la imagen en la caja de confirmación (Ctrl + V).")
-
-                    with t_up2:
-                        up_f = st.file_uploader("Selecciona una imagen desde tu PC:", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{row_key}")
-                        col_up_1, col_up_2 = st.columns(2)
-                        with col_up_1:
-                            tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
-                        with col_up_2:
-                            nota_f = st.text_input("Nota / Observación técnica:", placeholder="Ej: Reacción perfecta en POI", key=f"inp_nota_f_{row_key}")
-
-                        if st.button("💾 Subir y Guardar Imagen", key=f"btn_save_f_{row_key}", use_container_width=True):
-                            if up_f is not None:
-                                b64_res = file_to_base64(up_f)
-                                if b64_res:
+                            tipo_p = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_p_{row_key}")
+                            nota_p = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura", key=f"inp_nota_p_{row_key}")
+                            pasted_text = st.text_area("Confirmación Imagen (Ctrl + V):", placeholder="Pega aquí el código...", key=f"pasted_txt_{row_key}", height=70)
+                                
+                            if st.button("💾 Guardar Captura Pegada", key=f"btn_save_p_{row_key}", use_container_width=True):
+                                if pasted_text and len(pasted_text.strip()) > 50:
                                     nueva_c = {
-                                        "tipo": tipo_f,
-                                        "nota": nota_f,
-                                        "url": b64_res,
+                                        "tipo": tipo_p,
+                                        "nota": nota_p,
+                                        "url": pasted_text.strip(),
                                         "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                     }
                                     capturas_list.append(nueva_c)
                                     try:
                                         update_op_capturas(op_row, capturas_list)
-                                        st.success("¡Imagen subida y guardada en la fila!")
+                                        st.success("¡Captura guardada!")
                                         st.cache_data.clear()
                                         st.rerun()
-                                    except Exception as ex_f:
-                                        st.error(f"Error al guardar en Supabase: {ex_f}")
-                            else:
-                                st.warning("Por favor selecciona un archivo de imagen antes de guardar.")
+                                    except Exception as ex_p:
+                                        st.error(f"Error al guardar: {ex_p}")
+                                else:
+                                    st.warning("Pega la imagen en la caja de confirmación.")
+
+                        with t_pop2:
+                            up_f = st.file_uploader("Selecciona archivo:", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{row_key}")
+                            tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
+                            nota_f = st.text_input("Nota técnica:", placeholder="Ej: Reacción en POI", key=f"inp_nota_f_{row_key}")
+
+                            if st.button("💾 Subir y Guardar", key=f"btn_save_f_{row_key}", use_container_width=True):
+                                if up_f is not None:
+                                    b64_res = file_to_base64(up_f)
+                                    if b64_res:
+                                        nueva_c = {
+                                            "tipo": tipo_f,
+                                            "nota": nota_f,
+                                            "url": b64_res,
+                                            "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                                        }
+                                        capturas_list.append(nueva_c)
+                                        try:
+                                            update_op_capturas(op_row, capturas_list)
+                                            st.success("¡Imagen guardada!")
+                                            st.cache_data.clear()
+                                            st.rerun()
+                                        except Exception as ex_f:
+                                            st.error(f"Error al guardar: {ex_f}")
+                                else:
+                                    st.warning("Selecciona una imagen primero.")
+                
+                # Separador de fila discreto
+                st.markdown("<hr style='margin: 4px 0; border-color: #1E222E;'>", unsafe_allow_html=True)
