@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -8,7 +9,7 @@ import datetime
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM - TRADINGVIEW DARK THEME)
+# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="StickTrade Platform",
@@ -24,6 +25,17 @@ st.markdown("""
     .stApp {
         background-color: #12151C;
         color: #E0E3EB;
+    }
+    
+    /* Cambiar el fondo de las etiquetas del Multiselect a AZUL TRADINGVIEW (#2962FF) */
+    span[data-baseweb="tag"] {
+        background-color: #2962FF !important;
+        border-radius: 6px !important;
+        padding: 3px 8px !important;
+    }
+    span[data-baseweb="tag"] * {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
     }
     
     /* Tarjetas KPI */
@@ -52,102 +64,6 @@ st.markdown("""
     .green-text { color: #26A69A; }
     .red-text { color: #EF5350; }
     .blue-text { color: #2962FF; }
-
-    /* Estilo del Calendario Tradelio */
-    .tradelio-cal-container {
-        background-color: #12151C;
-        border: 1px solid #222631;
-        border-radius: 12px;
-        padding: 16px;
-        color: #E0E3EB;
-    }
-    .tradelio-grid {
-        display: grid;
-        grid-template-columns: 130px repeat(7, 1fr);
-        gap: 8px;
-        margin-top: 10px;
-    }
-    .tradelio-header {
-        text-align: center;
-        font-weight: 700;
-        font-size: 11px;
-        color: #787B86;
-        text-transform: uppercase;
-        padding-bottom: 6px;
-    }
-    .week-summary-card {
-        background-color: #1A1E29;
-        border: 1px solid #282D3C;
-        border-radius: 8px;
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        min-height: 85px;
-    }
-    .week-title {
-        font-size: 11px;
-        color: #A3A6AF;
-        font-weight: 600;
-    }
-    .week-pct {
-        font-size: 11px;
-        font-weight: 700;
-        margin-left: 4px;
-    }
-    .week-pct.green { color: #26A69A; }
-    .week-pct.red { color: #EF5350; }
-    .week-pct.neutral { color: #787B86; }
-    .week-val {
-        font-size: 17px;
-        font-weight: 800;
-        margin-top: 4px;
-        color: #FFFFFF;
-    }
-    
-    .day-box {
-        background-color: #1A1E29;
-        border: 1px solid #282D3C;
-        border-radius: 8px;
-        padding: 8px;
-        min-height: 85px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .day-box.empty-day {
-        background-color: #141722;
-        border: 1px solid #1E222E;
-    }
-    .day-box.win-day {
-        background: linear-gradient(180deg, rgba(38, 166, 154, 0.3) 0%, rgba(38, 166, 154, 0.08) 100%);
-        border: 1px solid rgba(38, 166, 154, 0.5);
-    }
-    .day-box.loss-day {
-        background: linear-gradient(180deg, rgba(239, 83, 80, 0.3) 0%, rgba(239, 83, 80, 0.08) 100%);
-        border: 1px solid rgba(239, 83, 80, 0.5);
-    }
-    .day-num {
-        font-size: 11px;
-        font-weight: 700;
-        color: #D1D4DC;
-        text-align: right;
-    }
-    .day-content {
-        text-align: right;
-    }
-    .day-pnl {
-        font-size: 13px;
-        font-weight: 800;
-        color: #FFFFFF;
-    }
-    .day-meta {
-        font-size: 9px;
-        color: #A3A6AF;
-        margin-top: 2px;
-    }
-    .green-meta { color: #26A69A; font-weight: 700; }
-    .red-meta { color: #EF5350; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -196,7 +112,7 @@ cuentas_seleccionadas = st.sidebar.multiselect(
     default=nombres_cuentas_disponibles
 )
 
-# Filtrar Cuentas y Operaciones de forma robusta
+# Filtrar Cuentas y Operaciones
 if cuentas_seleccionadas:
     cuentas = [c for c in cuentas_raw if c["nombre_cuenta"] in cuentas_seleccionadas]
 else:
@@ -301,7 +217,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO ESTILO TRADELIO
+# TAB 1: CALENDARIO VISUAL
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -330,29 +246,44 @@ with tab_calendar:
                     'win_rate': wr_val
                 }
 
-    # Construcción del Calendario con inicio en DOMINGO (firstweekday=6)
-    cal_obj = calendar.Calendar(firstweekday=6)
+    # Construcción del Calendario HTML limpio
+    cal_obj = calendar.Calendar(firstweekday=6) # Inicio en Domingo
     month_weeks = cal_obj.monthdayscalendar(int(ano_sel), int(mes_sel))
     
-    html_cal = """
-    <div class="tradelio-cal-container">
-        <div class="tradelio-grid">
-            <div class="tradelio-header">SEMANA</div>
-            <div class="tradelio-header">DOM</div>
-            <div class="tradelio-header">LUN</div>
-            <div class="tradelio-header">MAR</div>
-            <div class="tradelio-header">MIÉ</div>
-            <div class="tradelio-header">JUE</div>
-            <div class="tradelio-header">VIE</div>
-            <div class="tradelio-header">SÁB</div>
+    css_cal = """
+    <style>
+        body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .tradelio-cal-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 10px; }
+        .tradelio-grid { display: grid; grid-template-columns: 130px repeat(7, 1fr); gap: 8px; }
+        .tradelio-header { text-align: center; font-weight: 700; font-size: 11px; color: #787B86; text-transform: uppercase; padding-bottom: 4px; }
+        .week-summary-card { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
+        .week-title { font-size: 11px; color: #A3A6AF; font-weight: 600; }
+        .week-pct { font-size: 11px; font-weight: 700; margin-left: 4px; }
+        .week-pct.green { color: #26A69A; }
+        .week-pct.red { color: #EF5350; }
+        .week-pct.neutral { color: #787B86; }
+        .week-val { font-size: 17px; font-weight: 800; margin-top: 4px; color: #FFFFFF; }
+        .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+        .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
+        .day-box.win-day { background: linear-gradient(180deg, rgba(38, 166, 154, 0.3) 0%, rgba(38, 166, 154, 0.08) 100%); border: 1px solid rgba(38, 166, 154, 0.5); }
+        .day-box.loss-day { background: linear-gradient(180deg, rgba(239, 83, 80, 0.3) 0%, rgba(239, 83, 80, 0.08) 100%); border: 1px solid rgba(239, 83, 80, 0.5); }
+        .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
+        .day-content { text-align: right; }
+        .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF; }
+        .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
+        .green-meta { color: #26A69A; font-weight: 700; }
+        .red-meta { color: #EF5350; font-weight: 700; }
+    </style>
     """
+    
+    html_grid = f"{css_cal}<div class='tradelio-cal-container'><div class='tradelio-grid'>"
+    html_grid += "<div class='tradelio-header'>SEMANA</div><div class='tradelio-header'>DOM</div><div class='tradelio-header'>LUN</div><div class='tradelio-header'>MAR</div><div class='tradelio-header'>MIÉ</div><div class='tradelio-header'>JUE</div><div class='tradelio-header'>VIE</div><div class='tradelio-header'>SÁB</div>"
     
     dias_ganadores = 0
     dias_perdedores = 0
     total_pnl_mes = 0.0
 
     for w_idx, week in enumerate(month_weeks, start=1):
-        # Calcular PnL de la semana
         week_pnl = 0.0
         for day in week:
             if day != 0:
@@ -364,21 +295,13 @@ with tab_calendar:
         week_pct = (week_pnl / tot_inicial * 100) if tot_inicial > 0 else 0
         pct_cls = "green" if week_pnl > 0 else ("red" if week_pnl < 0 else "neutral")
         
-        # Tarjeta de resumen de semana (Columna izquierda)
-        html_cal += f"""
-        <div class="week-summary-card">
-            <div>
-                <span class="week-title">Week {w_idx}</span>
-                <span class="week-pct {pct_cls}">{week_pct:+.2f}%</span>
-            </div>
-            <div class="week-val">${week_pnl:,.2f}</div>
-        </div>
-        """
+        # Tarjeta Semanal
+        html_grid += f"<div class='week-summary-card'><div><span class='week-title'>Week {w_idx}</span><span class='week-pct {pct_cls}'>{week_pct:+.2f}%</span></div><div class='week-val'>${week_pnl:,.2f}</div></div>"
         
-        # Tarjetas diarias
+        # Tarjetas Diarias
         for day in week:
             if day == 0:
-                html_cal += '<div class="day-box empty-day"></div>'
+                html_grid += "<div class='day-box empty-day'></div>"
             else:
                 fecha_obj = datetime.date(int(ano_sel), int(mes_sel), day)
                 if fecha_obj in daily_stats:
@@ -402,28 +325,16 @@ with tab_calendar:
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
                         
-                    html_cal += f"""
-                    <div class="day-box {box_cls}">
-                        <div class="day-num">{day}</div>
-                        <div class="day-content">
-                            <div class="day-pnl">{pnl_fmt}</div>
-                            <div class="day-meta">{meta_str}</div>
-                        </div>
-                    </div>
-                    """
+                    html_grid += f"<div class='day-box {box_cls}'><div class='day-num'>{day}</div><div class='day-content'><div class='day-pnl'>{pnl_fmt}</div><div class='day-meta'>{meta_str}</div></div></div>"
                 else:
-                    html_cal += f"""
-                    <div class="day-box">
-                        <div class="day-num">{day}</div>
-                    </div>
-                    """
+                    html_grid += f"<div class='day-box'><div class='day-num'>{day}</div></div>"
                     
-    html_cal += "</div></div>"
+    html_grid += "</div></div>"
     
-    st.markdown(html_cal, unsafe_allow_html=True)
+    # Renderizado seguro en iFrame HTML
+    components.html(html_grid, height=620, scrolling=True)
     
     # Métricas del mes
-    st.markdown("<br>", unsafe_allow_html=True)
     mc1, mc2, mc3 = st.columns(3)
     mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}")
     mc2.metric("Días Verdes (Win)", f"{dias_ganadores} días")
@@ -442,7 +353,6 @@ with tab_analytics:
         col_g1, col_g2 = st.columns([2, 1])
         
         with col_g1:
-            # Curva de Equidad
             fig_equity = go.Figure()
             fig_equity.add_trace(go.Scatter(
                 x=df_ops_sorted["fecha_dt"],
@@ -466,7 +376,6 @@ with tab_analytics:
             st.plotly_chart(fig_equity, use_container_width=True)
             
         with col_g2:
-            # Gráfico Donut Win/Loss
             fig_donut = go.Figure(data=[go.Pie(
                 labels=['Wins', 'Losses', 'BE'],
                 values=[wins, losses, total_trades - (wins + losses)],
@@ -483,7 +392,6 @@ with tab_analytics:
             )
             st.plotly_chart(fig_donut, use_container_width=True)
             
-        # PnL Diario
         daily_pnl = df_ops.groupby('fecha_dia')['resultado'].sum().reset_index()
         daily_pnl['color'] = daily_pnl['resultado'].apply(lambda x: '#26A69A' if x >= 0 else '#EF5350')
         
@@ -542,7 +450,6 @@ with tab_cuentas:
                     col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}")
                     st.caption("🟢 Cuenta Fondeada activa.")
                 
-                # Barra de riesgo
                 pct_drawdown = min(max(p_diaria_act / p_diaria_max, 0.0), 1.0) if p_diaria_max > 0 else 0
                 st.write("**Uso del Límite de Pérdida Diaria:**")
                 st.progress(pct_drawdown, text=f"{pct_drawdown*100:.1f}% consumido (${p_diaria_act:,.2f} / ${p_diaria_max:,.2f})")
