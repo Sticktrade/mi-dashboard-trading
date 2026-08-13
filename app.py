@@ -9,7 +9,7 @@ import datetime
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM)
+# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM - BLUE THEME OVERRIDE)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="StickTrade Platform",
@@ -18,16 +18,38 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados
+# Estilos CSS avanzados para forzar el AZUL (#2962FF) en toda la interfaz
 st.markdown("""
 <style>
-    /* Fondo principal */
+    /* Forzar variable de color primario a Azul TradingView */
+    :root {
+        --primary-color: #2962FF !important;
+    }
+
+    /* Fondo principal de la app */
     .stApp {
         background-color: #12151C;
         color: #E0E3EB;
     }
     
-    /* Estilo de los Checkboxes de Selección de Cuentas */
+    /* Pestañas (Tabs) - Texto Inactivo y Activo */
+    button[data-baseweb="tab"] {
+        color: #787B86 !important;
+        font-weight: 600 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #2962FF !important;
+    }
+    
+    /* Línea resaltada inferior de la Pestaña Activa */
+    div[data-baseweb="tab-highlight"] {
+        background-color: #2962FF !important;
+    }
+    div[data-baseweb="tab-border"] {
+        background-color: #282D3C !important;
+    }
+    
+    /* Estilo de las Casillas de Verificación (Checkboxes) */
     div[data-baseweb="checkbox"] {
         margin-bottom: 8px;
         padding: 4px 8px;
@@ -38,16 +60,34 @@ st.markdown("""
         background-color: #1A1E29;
     }
     
-    /* Cuadro de Check cuando está activo (Azul TradingView #2962FF) */
-    div[data-baseweb="checkbox"] input:checked + div {
+    /* Cuadro de Check activo en Azul */
+    div[data-baseweb="checkbox"] input:checked + div,
+    div[role="checkbox"][aria-checked="true"] {
         background-color: #2962FF !important;
         border-color: #2962FF !important;
+    }
+    
+    /* Icono del check interno */
+    div[data-baseweb="checkbox"] svg {
+        fill: #FFFFFF !important;
     }
     
     div[data-baseweb="checkbox"] span {
         color: #E0E3EB !important;
         font-size: 14px !important;
         font-weight: 500 !important;
+    }
+    
+    /* Botones con borde de enfocado/hover en Azul */
+    .stButton > button {
+        border-radius: 8px !important;
+        border: 1px solid #282D3C !important;
+        background-color: #1A1E29 !important;
+        color: #E0E3EB !important;
+    }
+    .stButton > button:hover {
+        border-color: #2962FF !important;
+        color: #2962FF !important;
     }
     
     /* Tarjetas KPI */
@@ -118,7 +158,6 @@ st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
 nombres_cuentas_disponibles = sorted(list(set([c["nombre_cuenta"] for c in cuentas_raw]))) if cuentas_raw else []
 
-# Botones rápidos para Seleccionar/Deseleccionar todas
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
     for c in nombres_cuentas_disponibles:
@@ -283,7 +322,7 @@ with tab_calendar:
                     'win_rate': wr_val
                 }
 
-    # Construcción del Calendario HTML limpio
+    # Construcción del Calendario HTML
     cal_obj = calendar.Calendar(firstweekday=6) # Inicio en Domingo
     month_weeks = cal_obj.monthdayscalendar(int(ano_sel), int(mes_sel))
     
@@ -368,7 +407,7 @@ with tab_calendar:
                     
     html_grid += "</div></div>"
     
-    # Renderizado seguro en iFrame HTML
+    # Renderizado iFrame
     components.html(html_grid, height=620, scrolling=True)
     
     # Métricas del mes
