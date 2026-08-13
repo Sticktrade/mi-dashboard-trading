@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -8,112 +7,7 @@ import calendar
 import datetime
 import json
 import base64
-import os
 from supabase import create_client
-
-# -----------------------------------------------------------------------------
-# 0. COMPONENTE PERSONALIZADO PARA PEGADO DIRECTO (CTRL + V) SIN CONFIRMACIÓN
-# -----------------------------------------------------------------------------
-COMPONENT_DIR = os.path.join(os.path.dirname(__file__), "paste_component")
-os.makedirs(COMPONENT_DIR, exist_ok=True)
-
-html_paste_code = """<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: transparent;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: #E0E3EB;
-        }
-        .paste-box {
-            background-color: #1A1E29;
-            border: 2px dashed #2962FF;
-            border-radius: 8px;
-            padding: 14px;
-            text-align: center;
-            cursor: pointer;
-            transition: background-color 0.2s, border-color 0.2s;
-        }
-        .paste-box:hover, .paste-box:focus {
-            background-color: #222736;
-            border-color: #3D72FF;
-            outline: none;
-        }
-        .title {
-            font-size: 13px;
-            font-weight: 700;
-            color: #2962FF;
-            margin: 0;
-        }
-        .subtitle {
-            font-size: 11px;
-            color: #787B86;
-            margin-top: 4px;
-        }
-        #status {
-            font-size: 12px;
-            color: #26A69A;
-            margin-top: 6px;
-            font-weight: 600;
-            display: none;
-        }
-    </style>
-    <script>
-        function sendValue(val) {
-            window.parent.postMessage({
-                isStreamlitMessage: true,
-                type: "streamlit:setComponentValue",
-                value: val
-            }, "*");
-        }
-        function setHeight() {
-            window.parent.postMessage({
-                isStreamlitMessage: true,
-                type: "streamlit:setFrameHeight",
-                height: 90
-            }, "*");
-        }
-    </script>
-</head>
-<body onload="setHeight()">
-    <div class="paste-box" id="paste-box" tabindex="0">
-        <p class="title">📋 CLIC AQUÍ Y PRESIONA CTRL + V</p>
-        <p class="subtitle">La imagen se capturará directamente sin copiar textos ni confirmar códigos.</p>
-        <p id="status">✅ Captura recibida con éxito</p>
-    </div>
-
-    <script>
-        const pasteBox = document.getElementById('paste-box');
-        const statusText = document.getElementById('status');
-
-        window.addEventListener('paste', (e) => {
-            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            for (let item of items) {
-                if (item.kind === 'file' && item.type.startsWith('image/')) {
-                    const blob = item.getAsFile();
-                    const reader = new FileReader();
-                    reader.onload = function(evt) {
-                        const base64Data = evt.target.result;
-                        statusText.style.display = 'block';
-                        sendValue(base64Data);
-                    };
-                    reader.readAsDataURL(blob);
-                }
-            }
-        });
-    </script>
-</body>
-</html>
-"""
-
-with open(os.path.join(COMPONENT_DIR, "index.html"), "w", encoding="utf-8") as f:
-    f.write(html_paste_code)
-
-paste_component = components.declare_component("paste_component", path=COMPONENT_DIR)
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM)
@@ -204,6 +98,18 @@ st.markdown("""
         padding-left: 14px !important;
     }
     
+    /* File Uploader Estilizado para Pegar con Ctrl+V */
+    div[data-testid="stFileUploader"] {
+        background-color: #1A1E29;
+        border: 2px dashed #2962FF !important;
+        border-radius: 8px;
+        padding: 10px;
+    }
+    div[data-testid="stFileUploader"]:focus-within {
+        border-color: #3D72FF !important;
+        background-color: #222736;
+    }
+
     /* Botones */
     .stButton > button {
         border-radius: 8px !important;
@@ -613,7 +519,7 @@ with tab_calendar:
                     
     html_grid += "</div></div>"
     
-    components.html(html_grid, height=620, scrolling=True)
+    st.components.v1.html(html_grid, height=620, scrolling=True)
     
     mc1, mc2, mc3 = st.columns(3)
     mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}")
@@ -932,7 +838,7 @@ with tab_trades:
             # TABLA LIMPIA EXACTA ESTILO NOTION (FILAS ALINEADAS POR COLUMNAS)
             # -----------------------------------------------------------------
             st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
-            st.caption("Tabla de historial alineada. Haz clic en el botón de estado de cualquier fila para abrir el panel flotante de capturas.")
+            st.caption("Tabla de historial alineada. Haz clic en el botón de estado para abrir las capturas.")
             
             # Encabezado de la Tabla
             hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
@@ -945,7 +851,7 @@ with tab_trades:
             
             st.markdown("<hr style='margin: 6px 0 10px 0; border-color: #282D3C;'>", unsafe_allow_html=True)
 
-            # Renderizado de Filas de la Tabla Estilo Notion
+            # Renderizado de Filas
             list_sessions = df_filtered_tab4.to_dict("records")
             
             for idx, row in enumerate(list_sessions):
@@ -956,7 +862,6 @@ with tab_trades:
                 pct_num = float(row["pct_rendimiento"])
                 clasif = str(row["clasificacion"])
                 
-                # Buscar el registro correspondiente en ops_raw
                 matching_ops = [
                     op for op in ops_raw 
                     if str(op.get("account_number")) == acc_id_str and str(op.get("fecha", "")).startswith(f_str)
@@ -972,7 +877,6 @@ with tab_trades:
                 capturas_list = parse_capturas(op_row.get("capturas"))
                 num_caps = len(capturas_list)
                 
-                # Formateo de Celdas
                 if clasif == "WIN":
                     badge = f"🟩 WIN ({num_caps})"
                     res_html = f"<span class='green-text'>+${res_num:,.2f}</span>"
@@ -988,7 +892,6 @@ with tab_trades:
 
                 row_key = f"pop_{acc_id_str}_{f_str}_{idx}"
                 
-                # Renderizado estricto en columnas limpias
                 c1, c2, c3, c4, c5, c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
                 
                 with c1:
@@ -1002,13 +905,12 @@ with tab_trades:
                 with c5:
                     st.markdown(pct_html, unsafe_allow_html=True)
                 with c6:
-                    # Celda/Popover flotante exactamente estilo Notion
                     with st.popover(badge, use_container_width=True):
                         st.markdown(f"### 📊 Sesión: {acc_name} (`#{acc_id_str}`)")
                         st.markdown(f"**Fecha:** `{f_str}` | **Resultado:** {res_html} ({pct_html})", unsafe_allow_html=True)
                         st.markdown("---")
                         
-                        # --- GALERÍA DE CAPTURAS DENTRO DEL POPOVER ---
+                        # GALERÍA DE CAPTURAS
                         st.markdown(f"##### 🖼️ Capturas de Pantalla ({num_caps})")
                         if capturas_list:
                             grid_cols = st.columns(min(len(capturas_list), 2))
@@ -1037,7 +939,7 @@ with tab_trades:
                         else:
                             st.info("No hay capturas adjuntas aún para esta sesión.")
 
-                        # Vista ampliada (Zoom) dentro del popover
+                        # Zoom
                         zoom_data = st.session_state.get(f"active_zoom_{row_key}")
                         if zoom_data:
                             st.markdown("---")
@@ -1048,61 +950,41 @@ with tab_trades:
                                 del st.session_state[f"active_zoom_{row_key}"]
                                 st.rerun()
 
-                        # --- ZONA DE CARGA DENTRO DEL POPOVER ---
+                        # ZONA DE SUBIDA DIRECTA CON CTRL + V
                         st.markdown("---")
-                        st.markdown("##### 📤 Adjuntar Nueva Captura")
+                        st.markdown("##### 📤 Adjuntar Nueva Captura (Pega con Ctrl + V o Subir)")
                         
-                        t_pop1, t_pop2 = st.tabs(["📋 Pegar Imagen (Ctrl + V)", "📁 Subir Archivo"])
-                        
-                        with t_pop1:
-                            tipo_p = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_p_{row_key}")
-                            nota_p = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura", key=f"inp_nota_p_{row_key}")
-                            
-                            pasted_b64 = paste_component(key=f"paste_comp_{row_key}")
-                            
-                            if pasted_b64:
-                                st.image(pasted_b64, caption="✅ Previsualización lista para guardar", use_container_width=True)
-                                if st.button("💾 Guardar Captura Pegada", key=f"btn_save_p_{row_key}", use_container_width=True):
+                        tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
+                        nota_f = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura en POI", key=f"inp_nota_f_{row_key}")
+
+                        up_f = st.file_uploader(
+                            "📋 Haz clic aquí y presiona Ctrl + V (o explora tu archivo):", 
+                            type=["png", "jpg", "jpeg", "webp"], 
+                            key=f"uploader_{row_key}"
+                        )
+
+                        if up_f is not None:
+                            st.image(up_f, caption="✅ Imagen pegada/cargada correctamente", use_container_width=True)
+
+                        if st.button("💾 Guardar Captura", key=f"btn_save_f_{row_key}", use_container_width=True):
+                            if up_f is not None:
+                                b64_res = file_to_base64(up_f)
+                                if b64_res:
                                     nueva_c = {
-                                        "tipo": tipo_p,
-                                        "nota": nota_p,
-                                        "url": pasted_b64,
+                                        "tipo": tipo_f,
+                                        "nota": nota_f,
+                                        "url": b64_res,
                                         "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                     }
                                     capturas_list.append(nueva_c)
                                     try:
                                         update_op_capturas(op_row, capturas_list)
-                                        st.success("¡Captura guardada!")
+                                        st.success("¡Imagen guardada!")
                                         st.cache_data.clear()
                                         st.rerun()
-                                    except Exception as ex_p:
-                                        st.error(f"Error al guardar: {ex_p}")
-
-                        with t_pop2:
-                            up_f = st.file_uploader("Selecciona archivo:", type=["png", "jpg", "jpeg", "webp"], key=f"uploader_{row_key}")
-                            tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
-                            nota_f = st.text_input("Nota técnica:", placeholder="Ej: Reacción en POI", key=f"inp_nota_f_{row_key}")
-
-                            if st.button("💾 Subir y Guardar", key=f"btn_save_f_{row_key}", use_container_width=True):
-                                if up_f is not None:
-                                    b64_res = file_to_base64(up_f)
-                                    if b64_res:
-                                        nueva_c = {
-                                            "tipo": tipo_f,
-                                            "nota": nota_f,
-                                            "url": b64_res,
-                                            "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                                        }
-                                        capturas_list.append(nueva_c)
-                                        try:
-                                            update_op_capturas(op_row, capturas_list)
-                                            st.success("¡Imagen guardada!")
-                                            st.cache_data.clear()
-                                            st.rerun()
-                                        except Exception as ex_f:
-                                            st.error(f"Error al guardar: {ex_f}")
-                                else:
-                                    st.warning("Selecciona una imagen primero.")
+                                    except Exception as ex_f:
+                                        st.error(f"Error al guardar: {ex_f}")
+                            else:
+                                st.warning("Pega con Ctrl + V o selecciona un archivo primero.")
                 
-                # Separador de fila discreto
                 st.markdown("<hr style='margin: 4px 0; border-color: #1E222E;'>", unsafe_allow_html=True)
