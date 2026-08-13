@@ -553,7 +553,7 @@ with tab_analytics:
         st.plotly_chart(fig_daily, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS (DISEÑO Y FORMATO ORIGINAL)
+# TAB 3: ESTADO DE CUENTAS (CON COLORES DINÁMICOS EN PROGRESS TEXT)
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -575,7 +575,7 @@ with tab_cuentas:
             with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — [{c['estado']}]", expanded=True):
                 col_c1, col_c2, col_c3 = st.columns(3)
                 
-                # Metric 1: Balance Actual (Rojo con flecha abajo si es negativo, Verde con flecha arriba si es positivo)
+                # Metric 1: Balance Actual
                 delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
                 col_c1.metric(
                     "Balance Actual", 
@@ -613,23 +613,42 @@ with tab_cuentas:
                         delta=delta_payout
                     )
                 
-                # Progreso hacia el Objetivo (Barra limpia original)
+                # Formateo con etiquetas de color Streamlit :red[...] y :green[...]
+                if ganancia < 0:
+                    str_ganancia = f":red[-\\${abs(ganancia):,.2f}]"
+                elif ganancia > 0:
+                    str_ganancia = f":green[+\\${ganancia:,.2f}]"
+                else:
+                    str_ganancia = "\\$0.00"
+                    
+                str_obj = f"\\${c.get('objetivo_profit', 0):,.2f}"
+                
+                # Progreso hacia el Objetivo
                 if c["estado"] != "Fondeada":
                     obj = c["objetivo_profit"]
                     st.write("**Progreso hacia el Objetivo (Phase Pass):**")
+                    txt_p = f"{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})"
                     st.progress(
                         pct_prog, 
-                        text=f"{pct_prog*100:.1f}% alcanzado (${ganancia:,.2f} / ${obj:,.2f})"
+                        text=txt_p
                     )
                 else:
                     st.caption("🟢 Cuenta Fondeada activa.")
                 
-                # Uso del Límite de Pérdida Diaria (Barra limpia original)
+                # Uso del Límite de Pérdida Diaria
+                if p_diaria_act > 0:
+                    str_p_act = f":red[-\\${p_diaria_act:,.2f}]"
+                else:
+                    str_p_act = f":green[\\$0.00]"
+                    
+                str_p_max = f"\\${p_diaria_max:,.2f}"
+                
                 pct_drawdown = min(max(p_diaria_act / p_diaria_max, 0.0), 1.0) if p_diaria_max > 0 else 0
                 st.write("**Límite de Pérdida Diaria Consumido Hoy:**")
+                txt_d = f"{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})"
                 st.progress(
                     pct_drawdown, 
-                    text=f"{pct_drawdown*100:.1f}% consumido (${p_diaria_act:,.2f} / ${p_diaria_max:,.2f})"
+                    text=txt_d
                 )
 
 # =============================================================================
