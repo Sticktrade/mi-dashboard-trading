@@ -139,7 +139,7 @@ st.markdown("""
         align-items: center !important;
     }
     
-    /* Modal de Zoom Súper Grande a Pantalla Casi Completa Estilo Lightbox Notion */
+    /* Modal de Zoom Súper Grande Estilo Lightbox Notion */
     div[data-testid="stDialog"] > div {
         max-width: 92vw !important;
         width: 92vw !important;
@@ -214,7 +214,7 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE CON PERSISTENCIA Y EXCLUSIÓN DE ORION
+# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE Y EXCLUSIÓN DE ORION
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -235,9 +235,24 @@ if cuentas_raw:
             grupos_cuentas[nombre] = []
         grupos_cuentas[nombre].append(c)
 
-# Lectura de parámetros guardados en la URL
-saved_accs_param = st.query_params.get("accs", None)
-saved_ids = set(saved_accs_param.split(",")) if saved_accs_param else None
+# INICIALIZACIÓN DE ESTADO PRIMARIA (EXCLUYE ORION POR DEFECTO)
+if "init_accounts_state" not in st.session_state:
+    st.session_state["init_accounts_state"] = True
+    if cuentas_raw:
+        for c in cuentas_raw:
+            acc_id = str(c["account_number"])
+            nombre_c = str(c.get("nombre_cuenta", "")).lower()
+            key_c = f"chk_{acc_id}"
+            
+            if "orion" in nombre_c:
+                st.session_state[key_c] = False
+            else:
+                st.session_state[key_c] = True
+
+        for grp_n, acc_list in grupos_cuentas.items():
+            master_key = f"master_{grp_n}"
+            child_ids = [str(a["account_number"]) for a in acc_list]
+            st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
 
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
@@ -246,7 +261,6 @@ if col_b1.button("Todas", use_container_width=True):
             st.session_state[f"chk_{c['account_number']}"] = True
         for grp_n in grupos_cuentas.keys():
             st.session_state[f"master_{grp_n}"] = True
-        st.query_params["accs"] = ",".join([str(c['account_number']) for c in cuentas_raw])
         st.rerun()
 
 if col_b2.button("Ninguna", use_container_width=True):
@@ -255,7 +269,6 @@ if col_b2.button("Ninguna", use_container_width=True):
             st.session_state[f"chk_{c['account_number']}"] = False
         for grp_n in grupos_cuentas.keys():
             st.session_state[f"master_{grp_n}"] = False
-        st.query_params["accs"] = ""
         st.rerun()
 
 st.sidebar.markdown("<br>", unsafe_allow_html=True)
@@ -265,26 +278,7 @@ cuentas_seleccionadas_ids = []
 if cuentas_raw:
     for nombre_grp, lista_accs in grupos_cuentas.items():
         child_ids = [str(a["account_number"]) for a in lista_accs]
-
-        # Comprobar si pertenece a Orion Funded Nova
-        es_orion = "orion" in nombre_grp.lower()
-
-        # Inicialización de estado para cada subcuenta
-        for acc in lista_accs:
-            acc_id = str(acc["account_number"])
-            key = f"chk_{acc_id}"
-            es_acc_orion = es_orion or ("orion" in str(acc.get("nombre_cuenta", "")).lower())
-
-            if key not in st.session_state:
-                if saved_ids is not None:
-                    st.session_state[key] = (acc_id in saved_ids)
-                else:
-                    # Desmarcar por defecto si es Orion Funded Nova
-                    st.session_state[key] = not es_acc_orion
-
         master_key = f"master_{nombre_grp}"
-        if master_key not in st.session_state:
-            st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
 
         def make_callbacks(grp_k=master_key, c_ids=child_ids):
             def on_m_change():
@@ -303,14 +297,15 @@ if cuentas_raw:
             key = f"chk_{acc_id}"
             
             label = f"{acc['nombre_cuenta']} — ${acc['balance']:,.2f}"
-            if st.sidebar.checkbox(label, value=st.session_state[key], key=key):
+            if st.sidebar.checkbox(label, value=st.session_state.get(key, True), key=key):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
             tot_bal_grp = sum([a["balance"] for a in lista_accs])
             master_label = f"{nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}"
+            
             st.sidebar.checkbox(
                 master_label, 
-                value=st.session_state[master_key], 
+                value=st.session_state.get(master_key, False), 
                 key=master_key, 
                 on_change=cb_master
             )
@@ -323,14 +318,11 @@ if cuentas_raw:
                     child_label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
                     if st.checkbox(
                         child_label, 
-                        value=st.session_state[cid_key], 
+                        value=st.session_state.get(cid_key, False), 
                         key=cid_key, 
                         on_change=cb_child
                     ):
                         cuentas_seleccionadas_ids.append(acc_id)
-
-    # Actualizar parámetros en la URL para recordar la selección tras F5
-    st.query_params["accs"] = ",".join(cuentas_seleccionadas_ids)
 
 else:
     st.sidebar.info("Cargando cuentas...")
@@ -436,7 +428,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO VISUAL CON TONOS VERDE (#26A69A) Y ROJO (#EF5350) EXACTOS
+# TAB 1: CALENDARIO CON NÚMEROS EN BLANCO (#FFFFFF) Y FONDOS EXACTOS (#26A69A / #EF5350)
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -483,27 +475,24 @@ with tab_calendar:
         .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
         
-        /* Días Verdes: Fondo y borde basados en #26A69A */
+        /* Días Verdes: Fondo opaco con tono #26A69A y borde solido */
         .day-box.win-day { 
-            background: rgba(38, 166, 154, 0.18) !important; 
+            background: rgba(38, 166, 154, 0.22) !important; 
             border: 1px solid #26A69A !important; 
         }
-        .day-box.win-day .day-pnl { 
-            color: #26A69A !important; 
-        }
         
-        /* Días Rojos: Fondo y borde basados en #EF5350 */
+        /* Días Rojos: Fondo opaco con tono #EF5350 y borde solido */
         .day-box.loss-day { 
-            background: rgba(239, 83, 80, 0.18) !important; 
+            background: rgba(239, 83, 80, 0.22) !important; 
             border: 1px solid #EF5350 !important; 
-        }
-        .day-box.loss-day .day-pnl { 
-            color: #EF5350 !important; 
         }
         
         .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
         .day-content { text-align: right; }
-        .day-pnl { font-size: 13px; font-weight: 800; }
+        
+        /* Números PnL SIEMPRE en Blanco Puro como solicitaste */
+        .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF !important; }
+        
         .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
         .green-meta { color: #26A69A; font-weight: 700; }
         .red-meta { color: #EF5350; font-weight: 700; }
