@@ -10,10 +10,10 @@ import base64
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN VISUAL (STICKTRADE PLATFORM)
+# 1. CONFIGURACIÓN VISUAL (STICKTRADE)
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="StickTrade Platform",
+    page_title="StickTrade",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -139,8 +139,10 @@ st.markdown("""
         align-items: center !important;
     }
     
-    /* Ajustes para el Modal de Zoom Flotante Estilo Notion */
-    div[data-testid="stModal"] {
+    /* Modal de Zoom Súper Grande a Pantalla Casi Completa Estilo Lightbox Notion */
+    div[data-testid="stDialog"] > div {
+        max-width: 92vw !important;
+        width: 92vw !important;
         background-color: #12151C !important;
         border: 1px solid #282D3C !important;
         border-radius: 12px !important;
@@ -194,7 +196,7 @@ def update_op_capturas(op_row, new_capturas_list):
         fecha_val = op_row.get("fecha")
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
-# MODAL FLOTANTE A PANTALLA COMPLETA ESTILO NOTION
+# MODAL FLOTANTE MAXIMIZADO A CASI PANTALLA COMPLETA
 @st.dialog("🔍 Vista Ampliada de la Captura", width="large")
 def mostrar_modal_zoom(cap):
     img_src = cap.get("url") or cap.get("base64")
@@ -212,9 +214,9 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE DE CUENTAS
+# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE CON PERSISTENCIA Y DESPLEGABLES CONTRAÍDOS
 # -----------------------------------------------------------------------------
-st.sidebar.title("⚡ StickTrade Platform")
+st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
 
 st.sidebar.markdown("---")
@@ -260,6 +262,8 @@ if cuentas_raw:
             acc = lista_accs[0]
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
+            
+            # Mantiene el valor previo si existe en la sesión
             if key not in st.session_state:
                 st.session_state[key] = True
                 
@@ -297,7 +301,8 @@ if cuentas_raw:
                 on_change=cb_master
             )
             
-            with st.sidebar.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=True):
+            # Desplegable contraído por defecto (expanded=False)
+            with st.sidebar.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=False):
                 for acc in lista_accs:
                     acc_id = str(acc["account_number"])
                     cid_key = f"chk_{acc_id}"
@@ -332,7 +337,7 @@ if not df_ops.empty:
 # -----------------------------------------------------------------------------
 # 4. ENCABEZADO Y KPI CARDS
 # -----------------------------------------------------------------------------
-st.title("📈 StickTrade Platform — Dashboard")
+st.title("📈 StickTrade — Dashboard")
 st.caption("Visión consolidada y métricas de rendimiento en tiempo real.")
 
 tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
@@ -927,7 +932,7 @@ with tab_trades:
                                         
                                         b_col1, b_col2 = st.columns([2, 1])
                                         with b_col1:
-                                            # DISPARA EL MODAL FLOTANTE A PANTALLA COMPLETA
+                                            # DISPARA EL MODAL FLOTANTE MAXIMIZADO
                                             if st.button(f"🔍 Zoom", key=f"zoom_pop_{row_key}_{c_idx}", use_container_width=True):
                                                 mostrar_modal_zoom(cap)
                                         with b_col2:
