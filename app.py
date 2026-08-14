@@ -196,6 +196,39 @@ def update_op_capturas(op_row, new_capturas_list):
         fecha_val = op_row.get("fecha")
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
+def obtener_df_diario_clasificado(df_input, cuentas_lista):
+    """
+    Agrupa las operaciones por día y cuenta (sesión del aplicativo) y clasifica
+    según el rendimiento % en WIN (> +0.10%), LOSS (< -0.10%) y BE.
+    """
+    if df_input.empty:
+        return pd.DataFrame()
+    
+    map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_lista} if cuentas_lista else {}
+    df_copy = df_input.copy()
+    df_copy["acc_id_str"] = df_copy["account_number"].astype(str)
+    
+    if "nombre_cuenta" not in df_copy.columns:
+        df_copy["nombre_cuenta"] = "Cuenta"
+        
+    df_diario = df_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"]).agg({
+        "resultado": "sum"
+    }).reset_index()
+    
+    df_diario["balance_inicial"] = df_diario["acc_id_str"].map(lambda x: map_bal_inicial.get(x, 100000.0))
+    df_diario["pct_rendimiento"] = (df_diario["resultado"] / df_diario["balance_inicial"]) * 100.0
+    
+    def clasificar(pct):
+        if pct > 0.10:
+            return "WIN"
+        elif pct < -0.10:
+            return "LOSS"
+        else:
+            return "BE"
+            
+    df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar)
+    return df_diario
+
 # MODAL FLOTANTE MAXIMIZADO A CASI PANTALLA COMPLETA
 @st.dialog("🔍 Vista Ampliada de la Captura", width="large")
 def mostrar_modal_zoom(cap):
@@ -334,16 +367,31 @@ else:
 
 df_ops = pd.DataFrame(ops_raw) if ops_raw else pd.DataFrame()
 
+# CÁLCULO DE RESULTADO NETO CON COMISIONES Y SWAP
 if not df_ops.empty:
     df_ops['fecha_dt'] = pd.to_datetime(df_ops['fecha'])
     df_ops['fecha_dia'] = df_ops['fecha_dt'].dt.date
+    
+    # Aplicar comisiones y swap si existen en las columnas
+    comm_col = next((c for c in ['comision', 'comisiones', 'commission', 'comm'] if c in df_ops.columns), None)
+    swap_col = next((c for c in ['swap', 'swaps'] if c in df_ops.columns), None)
+    
+    if comm_col:
+        df_ops['resultado'] = df_ops['resultado'] + df_ops[comm_col].apply(
+            lambda x: -abs(float(x)) if pd.notnull(x) else 0.0
+        )
+    if swap_col:
+        df_ops['resultado'] = df_ops['resultado'] + df_ops[swap_col].apply(
+            lambda x: float(x) if pd.notnull(x) else 0.0
+        )
+
     if cuentas_seleccionadas_ids:
         df_ops = df_ops[df_ops["account_number"].astype(str).isin(cuentas_seleccionadas_ids)]
     else:
         df_ops = pd.DataFrame()
 
 # -----------------------------------------------------------------------------
-# 4. ENCABEZADO Y KPI CARDS
+# 4. ENCABEZADO Y KPI CARDS (WIN RATE BASADO EN HISTORIAL DEL APLICATIVO)
 # -----------------------------------------------------------------------------
 st.title("📈 StickTrade — Dashboard")
 st.caption("Visión consolidada y métricas de rendimiento en tiempo real.")
@@ -353,10 +401,17 @@ tot_actual = sum([c["balance"] for c in cuentas]) if cuentas else 0
 tot_ganado = tot_actual - tot_inicial
 pct_global = (tot_ganado / tot_inicial * 100) if tot_inicial > 0 else 0
 
-total_trades = len(df_ops) if not df_ops.empty else 0
-wins = len(df_ops[df_ops['win_loss'] == 'WIN']) if not df_ops.empty else 0
-losses = len(df_ops[df_ops['win_loss'] == 'LOSS']) if not df_ops.empty else 0
-win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+# Obtener historial clasificado por aplicativo
+df_diario_kpi = obtener_df_diario_clasificado(df_ops, cuentas_raw)
+
+if not df_diario_kpi.empty:
+    wins = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'WIN'])
+    losses = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'LOSS'])
+    be_cnt = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'BE'])
+    total_dias_operados = len(df_diario_kpi)
+    win_rate = (wins / total_dias_operados * 100) if total_dias_operados > 0 else 0
+else:
+    wins, losses, be_cnt, total_dias_operados, win_rate = 0, 0, 0, 0, 0
 
 gross_profit = df_ops[df_ops['resultado'] > 0]['resultado'].sum() if not df_ops.empty else 0
 gross_loss = abs(df_ops[df_ops['resultado'] < 0]['resultado'].sum()) if not df_ops.empty else 0
@@ -383,7 +438,7 @@ with kpi2:
     <div class="metric-card">
         <div class="metric-title">Win Rate</div>
         <div class="metric-value green-text">{win_rate:.1f}%</div>
-        <div style="color:#787B86; font-size:12px;">{wins}W / {losses}L ({total_trades} trades)</div>
+        <div style="color:#787B86; font-size:12px;">{wins}W / {losses}L / {be_cnt}BE ({total_dias_operados} días)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -555,15 +610,15 @@ with tab_calendar:
     mc3.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
 # =============================================================================
-# TAB 2: GRÁFICOS Y ANALYTICS (LÍNEA ÚNICA CONSOLIDADA & FILTROS INDEPENDIENTES)
+# TAB 2: GRÁFICOS Y ANALYTICS (CURVA DE BALANCE Y WIN/LOSS APLICATIVO)
 # =============================================================================
 with tab_analytics:
-    st.subheader("📊 Analytics y Curva de Equidad por Cuenta")
+    st.subheader("📊 Analytics y Curva de Balance por Cuenta")
     
     if df_ops.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        # 1. VISUALIZACIÓN CONSOLIDADA GLOBAL (LÍNEA ÚNICA ORIGINAL)
+        # 1. VISUALIZACIÓN CONSOLIDADA GLOBAL (CURVA DE BALANCE REAL)
         st.markdown("### 📈 Rendimiento Consolidado Global")
         
         filtro_periodo_global = st.radio(
@@ -595,28 +650,37 @@ with tab_analytics:
         else:
             df_ops_sorted = df_global_filtered.sort_values("fecha_dt").copy()
             df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
+            
+            # Curva de Balance Consolidada (Capital Inicial + PnL Acumulado)
+            tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
+            df_ops_sorted["balance_cum"] = tot_inicial + df_ops_sorted["cum_pnl"]
 
-            wins_g = len(df_global_filtered[df_global_filtered['win_loss'] == 'WIN'])
-            losses_g = len(df_global_filtered[df_global_filtered['win_loss'] == 'LOSS'])
-            be_g = len(df_global_filtered) - (wins_g + losses_g)
+            # Win/Loss/BE global calculado sobre el historial del aplicativo (sesiones diarias)
+            df_diario_g = obtener_df_diario_clasificado(df_global_filtered, cuentas_raw)
+            if not df_diario_g.empty:
+                wins_g = len(df_diario_g[df_diario_g['clasificacion'] == 'WIN'])
+                losses_g = len(df_diario_g[df_diario_g['clasificacion'] == 'LOSS'])
+                be_g = len(df_diario_g[df_diario_g['clasificacion'] == 'BE'])
+            else:
+                wins_g, losses_g, be_g = 0, 0, 0
 
             col_g1, col_g2 = st.columns([2, 1])
 
             with col_g1:
-                fig_equity = go.Figure()
-                # Única línea de Total Consolidado
-                fig_equity.add_trace(go.Scatter(
+                fig_balance = go.Figure()
+                fig_balance.add_trace(go.Scatter(
                     x=df_ops_sorted["fecha_dt"],
-                    y=df_ops_sorted["cum_pnl"],
+                    y=df_ops_sorted["balance_cum"],
                     mode='lines',
-                    name='Total Consolidado',
+                    name='Balance Consolidado',
                     line=dict(color='#2962FF', width=3),
                     fill='tozeroy',
-                    fillcolor='rgba(41, 98, 255, 0.12)'
+                    fillcolor='rgba(41, 98, 255, 0.12)',
+                    hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                 ))
 
-                fig_equity.update_layout(
-                    title=f'<b>Evolución de la Curva de Equidad Consolidada ($)</b>',
+                fig_balance.update_layout(
+                    title=f'<b>Evolución de la Curva de Balance Consolidada ($)</b>',
                     paper_bgcolor='#1A1E29',
                     plot_bgcolor='#1A1E29',
                     font=dict(color='#E0E3EB'),
@@ -625,7 +689,7 @@ with tab_analytics:
                     margin=dict(l=20, r=20, t=40, b=20),
                     height=380
                 )
-                st.plotly_chart(fig_equity, use_container_width=True)
+                st.plotly_chart(fig_balance, use_container_width=True)
 
             with col_g2:
                 fig_donut = go.Figure(data=[go.Pie(
@@ -635,7 +699,7 @@ with tab_analytics:
                     marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
                 )])
                 fig_donut.update_layout(
-                    title='<b>Distribución Win / Loss Global</b>',
+                    title='<b>Distribución Win / Loss Global (Aplicativo)</b>',
                     paper_bgcolor='#1A1E29',
                     font=dict(color='#E0E3EB'),
                     margin=dict(l=20, r=20, t=40, b=20),
@@ -644,16 +708,17 @@ with tab_analytics:
                 )
                 st.plotly_chart(fig_donut, use_container_width=True)
 
-        # 2. DESGLOSE INDIVIDUAL PARA CADA CUENTA CON FILTRO PROPIO
+        # 2. DESGLOSE INDIVIDUAL PARA CADA CUENTA CON FILTRO INDEPENDIENTE & BALANCE
         st.divider()
-        st.markdown("### 🏢 Evolución & Distribución por Cuenta Individual")
+        st.markdown("### 🏢 Curva de Balance & Distribución por Cuenta Individual")
         
         for c_acc in cuentas:
             acc_num_str = str(c_acc["account_number"])
             acc_name = c_acc["nombre_cuenta"]
+            acc_ini_bal = float(c_acc.get("balance_inicial", 100000.0))
             
-            with st.expander(f"🔹 **{acc_name}** (`#{acc_num_str}`) — Curva & Win/Loss", expanded=True):
-                # Filtro temporal individual para esta cuenta
+            with st.expander(f"🔹 **{acc_name}** (`#{acc_num_str}`) — Curva de Balance & Win/Loss", expanded=True):
+                # Filtro temporal independiente por cuenta
                 acc_period_filter = st.radio(
                     f"📅 Rango Temporal para {acc_name}:",
                     options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
@@ -683,26 +748,35 @@ with tab_analytics:
                 if df_acc.empty:
                     st.info("Sin operaciones registradas para esta cuenta en el periodo seleccionado.")
                 else:
+                    # Curva de Balance acumulativa para la cuenta individual
                     df_acc["cum_pnl"] = df_acc["resultado"].cumsum()
-                    w_acc = len(df_acc[df_acc['win_loss'] == 'WIN'])
-                    l_acc = len(df_acc[df_acc['win_loss'] == 'LOSS'])
-                    be_acc = len(df_acc) - (w_acc + l_acc)
+                    df_acc["balance_cum"] = acc_ini_bal + df_acc["cum_pnl"]
+
+                    # Win/Loss/BE basado en las sesiones del aplicativo para esta cuenta
+                    df_diario_acc = obtener_df_diario_clasificado(df_acc, cuentas_raw)
+                    if not df_diario_acc.empty:
+                        w_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'WIN'])
+                        l_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'LOSS'])
+                        be_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'BE'])
+                    else:
+                        w_acc, l_acc, be_acc = 0, 0, 0
 
                     c_acc_1, c_acc_2 = st.columns([2, 1])
 
                     with c_acc_1:
-                        fig_acc_eq = go.Figure()
-                        fig_acc_eq.add_trace(go.Scatter(
+                        fig_acc_bal = go.Figure()
+                        fig_acc_bal.add_trace(go.Scatter(
                             x=df_acc["fecha_dt"],
-                            y=df_acc["cum_pnl"],
+                            y=df_acc["balance_cum"],
                             mode='lines',
-                            name=f'PnL #{acc_num_str}',
+                            name=f'Balance #{acc_num_str}',
                             line=dict(color='#2962FF', width=2.5),
                             fill='tozeroy',
-                            fillcolor='rgba(41, 98, 255, 0.12)'
+                            fillcolor='rgba(41, 98, 255, 0.12)',
+                            hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                         ))
-                        fig_acc_eq.update_layout(
-                            title=f'<b>Curva de Equidad — {acc_name} (#{acc_num_str})</b>',
+                        fig_acc_bal.update_layout(
+                            title=f'<b>Curva de Balance — {acc_name} (#{acc_num_str})</b>',
                             paper_bgcolor='#1A1E29',
                             plot_bgcolor='#1A1E29',
                             font=dict(color='#E0E3EB'),
@@ -711,7 +785,7 @@ with tab_analytics:
                             margin=dict(l=20, r=20, t=40, b=20),
                             height=300
                         )
-                        st.plotly_chart(fig_acc_eq, use_container_width=True)
+                        st.plotly_chart(fig_acc_bal, use_container_width=True)
 
                     with c_acc_2:
                         fig_acc_donut = go.Figure(data=[go.Pie(
@@ -721,7 +795,7 @@ with tab_analytics:
                             marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
                         )])
                         fig_acc_donut.update_layout(
-                            title=f'<b>Win/Loss — {acc_name}</b>',
+                            title=f'<b>Win/Loss (Aplicativo) — {acc_name}</b>',
                             paper_bgcolor='#1A1E29',
                             font=dict(color='#E0E3EB'),
                             margin=dict(l=20, r=20, t=40, b=20),
@@ -859,34 +933,7 @@ with tab_trades:
     if df_ops.empty:
         st.info("No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_raw} if cuentas_raw else {}
-        
-        df_ops_copy = df_ops.copy()
-        df_ops_copy["acc_id_str"] = df_ops_copy["account_number"].astype(str)
-        
-        if "capturas" not in df_ops_copy.columns:
-            df_ops_copy["capturas"] = None
-        if "resultado" not in df_ops_copy.columns:
-            df_ops_copy["resultado"] = 0.0
-        if "nombre_cuenta" not in df_ops_copy.columns:
-            df_ops_copy["nombre_cuenta"] = "Cuenta"
-            
-        df_diario = df_ops_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"]).agg({
-            "resultado": "sum"
-        }).reset_index()
-        
-        df_diario["balance_inicial"] = df_diario["acc_id_str"].map(map_bal_inicial)
-        df_diario["pct_rendimiento"] = (df_diario["resultado"] / df_diario["balance_inicial"]) * 100.0
-        
-        def clasificar_resultado(pct):
-            if pct > 0.10:
-                return "WIN"
-            elif pct < -0.10:
-                return "LOSS"
-            else:
-                return "BE"
-                
-        df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar_resultado)
+        df_diario = obtener_df_diario_clasificado(df_ops, cuentas_raw)
         
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
             f_start, f_end = rango_fechas[0], rango_fechas[1]
