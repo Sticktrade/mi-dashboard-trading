@@ -166,10 +166,28 @@ except Exception as e:
     st.error(f"Error conectando a la base de datos: {e}")
     st.stop()
 
+def obtener_tarifa_por_lote(nombre_cuenta):
+    """
+    Retorna el costo de comisión por lote completo según la empresa de fondeo.
+    """
+    n_lower = str(nombre_cuenta).lower().strip()
+    if "wall street" in n_lower:
+        return 3.0  # $0.90 por 0.30 lotes = $3.00/lote
+    elif "funding pips" in n_lower:
+        return 5.0  # $1.75 por 0.35 lotes = $5.00/lote
+    elif "fiver" in n_lower:
+        return 4.0  # $4.00 por 1.00 lote
+    elif "funded next" in n_lower or "fundednext" in n_lower:
+        return 5.0  # $5.00 por 1.00 lote
+    elif "orion" in n_lower:
+        return 4.0  # Standard ($2.16/0.54) y Nova ($16/4.00) = $4.00/lote
+    return 4.0      # Valor general por defecto si no coincide el nombre
+
 def process_raw_operations(ops_list):
     """
-    Busca cualquier columna que contenga información de comisiones o swaps en Supabase.
-    Calcula: Resultado Neto = Ganancia Bruta - |Comisión| + Swap
+    Procesa las operaciones recuperadas de Supabase.
+    Si la comisión enviada es $0.00 pero existe volumen registrable, aplica la tarifa por lote.
+    Resultado Neto = Ganancia Bruta - |Comisión| + Swap
     """
     if not ops_list:
         return []
@@ -193,12 +211,21 @@ def process_raw_operations(ops_list):
             return None, 0.0
 
         profit_keys = ['resultado', 'profit', 'ganancia', 'pnl', 'netprofit', 'rawprofit', 'beneficio', 'monto']
-        comm_keys = ['comision', 'comisiones', 'commission', 'commissions', 'comm', 'fee', 'fees', 'totalcommission', 'commissionfee', 'comisionmt5', 'comisionmt4', 'comisioncerrar']
-        swap_keys = ['swap', 'swaps', 'rollover', 'swapmt4', 'swapmt5']
+        comm_keys   = ['comision', 'comisiones', 'commission', 'commissions', 'comm', 'fee', 'fees']
+        swap_keys   = ['swap', 'swaps', 'rollover']
+        vol_keys    = ['volume', 'volumen', 'lotes', 'lots', 'lotaje']
 
         p_key, raw_profit = find_val(profit_keys)
-        c_key, comm_val = find_val(comm_keys)
-        s_key, swap_val = find_val(swap_keys)
+        c_key, comm_val   = find_val(comm_keys)
+        s_key, swap_val   = find_val(swap_keys)
+        v_key, vol_val    = find_val(vol_keys)
+
+        nombre_cta = op_dict.get('nombre_cuenta', '')
+        
+        # Si no hay comisión registrada explícita pero hay volumen/lotes disponibles
+        if abs(comm_val) == 0.0 and vol_val > 0.0:
+            tarifa = obtener_tarifa_por_lote(nombre_cta)
+            comm_val = vol_val * tarifa
 
         net_result = raw_profit - abs(comm_val) + swap_val
 
@@ -318,12 +345,12 @@ with st.sidebar.expander("🛠️ Inspector de Datos Supabase", expanded=False):
         comm_val_detected = sample_op.get('comision_calc', 0.0)
         
         st.markdown(f"• Columna comisión: `{comm_col_detected}`")
-        st.markdown(f"• Valor leído: `${comm_val_detected:,.2f}`")
+        st.markdown(f"• Comisión calculada/leída: `${comm_val_detected:,.2f}`")
         
         if comm_val_detected == 0.0:
-            st.info("ℹ️ Esperando nuevas operaciones registradas por el EA.")
+            st.info("ℹ️ Sin comisiones registradas en la muestra.")
         else:
-            st.success(f"✅ Comisiones registradas y activas.")
+            st.success(f"✅ Comisiones integradas correctamente.")
     else:
         st.warning("No se recibieron operaciones de Supabase.")
 
@@ -1156,7 +1183,7 @@ with tab_trades:
                         if tot_comm > 0 or tot_swap != 0:
                             st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
                         else:
-                            st.info("ℹ️ Registro sin comisiones adicionales.")
+                            st.info("ℹ️ Registro de sesión sin comisiones aplicadas.")
                             
                         st.markdown("---")
                         
