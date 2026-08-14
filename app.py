@@ -130,8 +130,8 @@ st.markdown("""
         font-weight: 800;
         margin-top: 4px;
     }
-    .green-text { color: #26A69A; font-weight: 700; }
-    .red-text { color: #EF5350; font-weight: 700; }
+    .green-text { color: #3B82F6; font-weight: 700; }
+    .red-text { color: #E0E3EB; font-weight: 700; }
     .blue-text { color: #2962FF; }
 
     /* Estilos para Alineación de Filas */
@@ -429,7 +429,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO CON ESTILOS Y TONOS EXACTOS DE LA CAPTURA
+# TAB 1: CALENDARIO CON ESTILO AZUL (PROFIT) & BLANCO (PÉRDIDA)
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -468,24 +468,24 @@ with tab_calendar:
         .week-summary-card { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
         .week-title { font-size: 11px; color: #A3A6AF; font-weight: 600; }
         .week-pct { font-size: 11px; font-weight: 700; margin-left: 4px; }
-        .week-pct.green { color: #4ADE80 !important; }
-        .week-pct.red { color: #EF5350 !important; }
+        .week-pct.blue { color: #60A5FA !important; }
+        .week-pct.white { color: #E0E3EB !important; }
         .week-pct.neutral { color: #787B86; }
         .week-val { font-size: 17px; font-weight: 800; margin-top: 4px; color: #FFFFFF; }
         
         .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
         
-        /* FONDO Y BORDE VERDE SOMBREADO IGUAL A LA CAPTURA 1 */
+        /* DÍAS GANADORES / PROFIT: AZUL PROFUNDO ELEGANTE */
         .day-box.win-day { 
-            background-color: #11321E !important; 
-            border: 1px solid #1F5938 !important; 
+            background-color: #132247 !important; 
+            border: 1px solid #2962FF !important; 
         }
         
-        /* FONDO Y BORDE ROJO SOMBREADO IGUAL A LA CAPTURA 1 */
+        /* DÍAS PERDEDORES / LOSS: BLANCO / GRIS MATE TRANSLÚCIDO */
         .day-box.loss-day { 
-            background-color: #3C1C21 !important; 
-            border: 1px solid #63272F !important; 
+            background-color: rgba(255, 255, 255, 0.07) !important; 
+            border: 1px solid rgba(255, 255, 255, 0.25) !important; 
         }
         
         .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
@@ -496,9 +496,9 @@ with tab_calendar:
         
         .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
         
-        /* TONALIDAD DE TEXTOS VERDES Y ROJOS IGUAL A LA CAPTURA 1 */
-        .green-meta { color: #4ADE80 !important; font-weight: 700; }
-        .red-meta { color: #EF5350 !important; font-weight: 700; }
+        /* RESALTADOS DE RESULTADOS: AZUL Y BLANCO */
+        .blue-meta { color: #60A5FA !important; font-weight: 700; }
+        .white-meta { color: #E0E3EB !important; font-weight: 700; }
     </style>
     """
     
@@ -519,7 +519,7 @@ with tab_calendar:
                     
         total_pnl_mes += week_pnl
         week_pct = (week_pnl / tot_inicial * 100) if tot_inicial > 0 else 0
-        pct_cls = "green" if week_pnl > 0 else ("red" if week_pnl < 0 else "neutral")
+        pct_cls = "blue" if week_pnl > 0 else ("white" if week_pnl < 0 else "neutral")
         
         html_grid += f"<div class='week-summary-card'><div><span class='week-title'>Week {w_idx}</span><span class='week-pct {pct_cls}'>{week_pct:+.2f}%</span></div><div class='week-val'>${week_pnl:,.2f}</div></div>"
         
@@ -537,12 +537,12 @@ with tab_calendar:
                     if pnl > 0.01:
                         box_cls = "win-day"
                         pnl_fmt = f"${pnl:,.2f}" if abs(pnl) < 1000 else f"${pnl/1000:.2f}K"
-                        meta_str = f"{tr} ops | <span class='green-meta'>{wr:.0f}%</span>"
+                        meta_str = f"{tr} ops | <span class='blue-meta'>{wr:.0f}%</span>"
                         dias_ganadores += 1
                     elif pnl < -0.01:
                         box_cls = "loss-day"
                         pnl_fmt = f"-${abs(pnl):,.2f}" if abs(pnl) < 1000 else f"-${abs(pnl)/1000:.2f}K"
-                        meta_str = f"{tr} ops | <span class='red-meta'>{wr:.0f}%</span>"
+                        meta_str = f"{tr} ops | <span class='white-meta'>{wr:.0f}%</span>"
                         dias_perdedores += 1
                     else:
                         box_cls = ""
@@ -559,8 +559,8 @@ with tab_calendar:
     
     mc1, mc2, mc3 = st.columns(3)
     mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}")
-    mc2.metric("Días Verdes (Win)", f"{dias_ganadores} días")
-    mc3.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
+    mc2.metric("Días Azules (Win)", f"{dias_ganadores} días")
+    mc3.metric("Días Blancos (Loss)", f"{dias_perdedores} días")
 
 # =============================================================================
 # TAB 2: GRÁFICOS Y ANALYTICS
@@ -602,7 +602,7 @@ with tab_analytics:
                 labels=['Wins', 'Losses', 'BE'],
                 values=[wins, losses, total_trades - (wins + losses)],
                 hole=.6,
-                marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
+                marker=dict(colors=['#2962FF', '#E0E3EB', '#787B86'])
             )])
             fig_donut.update_layout(
                 title='<b>Distribución Win / Loss</b>',
@@ -615,7 +615,7 @@ with tab_analytics:
             st.plotly_chart(fig_donut, use_container_width=True)
             
         daily_pnl = df_ops.groupby('fecha_dia')['resultado'].sum().reset_index()
-        daily_pnl['color'] = daily_pnl['resultado'].apply(lambda x: '#26A69A' if x >= 0 else '#EF5350')
+        daily_pnl['color'] = daily_pnl['resultado'].apply(lambda x: '#2962FF' if x >= 0 else '#E0E3EB')
         
         fig_daily = go.Figure()
         fig_daily.add_trace(go.Bar(
@@ -697,11 +697,11 @@ with tab_cuentas:
                         delta=delta_payout
                     )
                 
-                # Formateo con etiquetas de color Streamlit :red[...] y :green[...]
+                # Formateo visual
                 if ganancia < 0:
-                    str_ganancia = f":red[-\\${abs(ganancia):,.2f}]"
+                    str_ganancia = f"-\\${abs(ganancia):,.2f}"
                 elif ganancia > 0:
-                    str_ganancia = f":green[+\\${ganancia:,.2f}]"
+                    str_ganancia = f"+\\${ganancia:,.2f}"
                 else:
                     str_ganancia = "\\$0.00"
                     
@@ -721,9 +721,9 @@ with tab_cuentas:
                 
                 # Uso del Límite de Pérdida Diaria
                 if p_diaria_act > 0:
-                    str_p_act = f":red[-\\${p_diaria_act:,.2f}]"
+                    str_p_act = f"-\\${p_diaria_act:,.2f}"
                 else:
-                    str_p_act = f":green[\\$0.00]"
+                    str_p_act = f"\\$0.00"
                     
                 str_p_max = f"\\${p_diaria_max:,.2f}"
                 
@@ -828,7 +828,7 @@ with tab_trades:
                     color="clasificacion",
                     orientation='h',
                     title="<b>Distribución Win / Loss / BE por Cuenta (%)</b>",
-                    color_discrete_map={'WIN': '#26A69A', 'LOSS': '#EF5350', 'BE': '#787B86'},
+                    color_discrete_map={'WIN': '#2962FF', 'LOSS': '#E0E3EB', 'BE': '#787B86'},
                     text=acc_stats['pct_cuenta'].apply(lambda x: f"{x:.0f}%")
                 )
                 fig_hbar.update_layout(
@@ -848,7 +848,7 @@ with tab_trades:
                 tot_counts = df_filtered_tab4["clasificacion"].value_counts().reset_index()
                 tot_counts.columns = ["clasificacion", "cantidad"]
                 
-                color_map = {'WIN': '#26A69A', 'LOSS': '#EF5350', 'BE': '#787B86'}
+                color_map = {'WIN': '#2962FF', 'LOSS': '#E0E3EB', 'BE': '#787B86'}
                 tot_counts['color'] = tot_counts['clasificacion'].map(color_map)
                 
                 fig_pie = go.Figure(data=[go.Pie(
@@ -913,11 +913,11 @@ with tab_trades:
                 num_caps = len(capturas_list)
                 
                 if clasif == "WIN":
-                    badge = f"🟩 WIN ({num_caps})"
+                    badge = f"🟦 WIN ({num_caps})"
                     res_html = f"<span class='green-text'>+${res_num:,.2f}</span>"
                     pct_html = f"<span class='green-text'>+{pct_num:.2f}%</span>"
                 elif clasif == "LOSS":
-                    badge = f"🟥 LOSS ({num_caps})"
+                    badge = f"⬜ LOSS ({num_caps})"
                     res_html = f"<span class='red-text'>-${abs(res_num):,.2f}</span>"
                     pct_html = f"<span class='red-text'>{pct_num:.2f}%</span>"
                 else:
