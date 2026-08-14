@@ -928,23 +928,19 @@ with tab_trades:
                                 del st.session_state[f"active_zoom_{row_key}"]
                                 st.rerun()
 
-                        # 🌟 NUEVA ZONA NATIVA DE SUBIDA (SIN ERRORES, SOPORTA CTRL+V)
+                        # ZONA NATIVA DE SUBIDA DE ARCHIVO
                         st.markdown("---")
                         st.markdown("##### 📤 Adjuntar Nueva Captura")
                         
                         tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
                         nota_f = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura en POI", key=f"inp_nota_f_{row_key}")
 
-                        st.info("💡 **TIP RÁPIDO:** Haz clic en el recuadro de abajo de *Drag and drop file here* y presiona **Ctrl + V** para pegar tu captura instantáneamente desde el portapapeles.")
-                        
-                        # UPLOADER OFICIAL: Maneja el pegado (Ctrl+V) automáticamente
-                        uploaded_file = st.file_uploader("Arrastra una imagen o haz clic aquí y presiona Ctrl + V", type=['png', 'jpg', 'jpeg', 'webp'], key=f"up_{row_key}")
+                        uploaded_file = st.file_uploader("Selecciona o arrastra tu archivo de captura aquí", type=['png', 'jpg', 'jpeg', 'webp'], key=f"up_{row_key}")
 
                         if uploaded_file is not None:
                             st.image(uploaded_file, caption="✅ Imagen lista para guardar", use_container_width=True)
 
                             if st.button("💾 Guardar Captura", key=f"btn_save_f_{row_key}", use_container_width=True):
-                                # Convertimos a Base64 localmente
                                 bytes_data = uploaded_file.getvalue()
                                 b64_encoded = base64.b64encode(bytes_data).decode("utf-8")
                                 b64_string = f"data:{uploaded_file.type};base64,{b64_encoded}"
@@ -958,7 +954,7 @@ with tab_trades:
                                 capturas_list.append(nueva_c)
                                 try:
                                     update_op_capturas(op_row, capturas_list)
-                                    st.success("¡Imagen guardada con éxito en Supabase!")
+                                    st.success("¡Imagen guardada con éxito!")
                                     st.cache_data.clear()
                                     st.rerun()
                                 except Exception as ex_f:
