@@ -196,6 +196,40 @@ def update_op_capturas(op_row, new_capturas_list):
         fecha_val = op_row.get("fecha")
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
+def calcular_resultado_neto(df):
+    """
+    Garantiza el cálculo del Resultado Neto descontando Comisiones y Swaps.
+    Resultado Neto = Resultado Bruto - |Comisión| + Swap
+    """
+    if df.empty:
+        return df
+    
+    profit_col = None
+    for c in ['resultado', 'profit', 'ganancia', 'pnl']:
+        if c in df.columns:
+            profit_col = c
+            break
+            
+    if profit_col is None:
+        return df
+
+    df['raw_profit'] = pd.to_numeric(df[profit_col], errors='coerce').fillna(0.0)
+    
+    comm_series = pd.Series(0.0, index=df.index)
+    for c in ['comision', 'comisiones', 'commission', 'comm', 'fee', 'fees']:
+        if c in df.columns:
+            comm_series = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
+            break
+            
+    swap_series = pd.Series(0.0, index=df.index)
+    for c in ['swap', 'swaps']:
+        if c in df.columns:
+            swap_series = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
+            break
+            
+    df['resultado'] = df['raw_profit'] - comm_series.abs() + swap_series
+    return df
+
 def obtener_df_diario_clasificado(df_input, cuentas_lista):
     """
     Agrupa las operaciones por día y cuenta (sesión del aplicativo) y clasifica
@@ -367,23 +401,13 @@ else:
 
 df_ops = pd.DataFrame(ops_raw) if ops_raw else pd.DataFrame()
 
-# CÁLCULO DE RESULTADO NETO CON COMISIONES Y SWAP
+# CÁLCULO GLOBAL DE RESULTADO NETO (CON COMISIONES Y SWAPS)
 if not df_ops.empty:
     df_ops['fecha_dt'] = pd.to_datetime(df_ops['fecha'])
     df_ops['fecha_dia'] = df_ops['fecha_dt'].dt.date
     
-    # Aplicar comisiones y swap si existen en las columnas
-    comm_col = next((c for c in ['comision', 'comisiones', 'commission', 'comm'] if c in df_ops.columns), None)
-    swap_col = next((c for c in ['swap', 'swaps'] if c in df_ops.columns), None)
-    
-    if comm_col:
-        df_ops['resultado'] = df_ops['resultado'] + df_ops[comm_col].apply(
-            lambda x: -abs(float(x)) if pd.notnull(x) else 0.0
-        )
-    if swap_col:
-        df_ops['resultado'] = df_ops['resultado'] + df_ops[swap_col].apply(
-            lambda x: float(x) if pd.notnull(x) else 0.0
-        )
+    # Descontar comisiones y sumar swaps
+    df_ops = calcular_resultado_neto(df_ops)
 
     if cuentas_seleccionadas_ids:
         df_ops = df_ops[df_ops["account_number"].astype(str).isin(cuentas_seleccionadas_ids)]
@@ -610,7 +634,7 @@ with tab_calendar:
     mc3.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
 # =============================================================================
-# TAB 2: GRÁFICOS Y ANALYTICS (CURVA DE BALANCE Y WIN/LOSS APLICATIVO)
+# TAB 2: GRÁFICOS Y ANALYTICS (ESCALA DINÁMICA DE BALANCE)
 # =============================================================================
 with tab_analytics:
     st.subheader("📊 Analytics y Curva de Balance por Cuenta")
@@ -618,7 +642,7 @@ with tab_analytics:
     if df_ops.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        # 1. VISUALIZACIÓN CONSOLIDADA GLOBAL (CURVA DE BALANCE REAL)
+        # 1. VISUALIZACIÓN CONSOLIDADA GLOBAL (CURVA DE BALANCE DINÁMICA)
         st.markdown("### 📈 Rendimiento Consolidado Global")
         
         filtro_periodo_global = st.radio(
@@ -651,11 +675,11 @@ with tab_analytics:
             df_ops_sorted = df_global_filtered.sort_values("fecha_dt").copy()
             df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
             
-            # Curva de Balance Consolidada (Capital Inicial + PnL Acumulado)
+            # Curva de Balance Consolidada (Capital Inicial + PnL Acumulado Neto)
             tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
             df_ops_sorted["balance_cum"] = tot_inicial + df_ops_sorted["cum_pnl"]
 
-            # Win/Loss/BE global calculado sobre el historial del aplicativo (sesiones diarias)
+            # Win/Loss/BE global calculado sobre las sesiones del aplicativo
             df_diario_g = obtener_df_diario_clasificado(df_global_filtered, cuentas_raw)
             if not df_diario_g.empty:
                 wins_g = len(df_diario_g[df_diario_g['clasificacion'] == 'WIN'])
@@ -663,6 +687,13 @@ with tab_analytics:
                 be_g = len(df_diario_g[df_diario_g['clasificacion'] == 'BE'])
             else:
                 wins_g, losses_g, be_g = 0, 0, 0
+
+            # Cálculo de zoom dinámico en el eje Y
+            min_bg = df_ops_sorted["balance_cum"].min()
+            max_bg = df_ops_sorted["balance_cum"].max()
+            diff_bg = max_bg - min_bg
+            padding_g = max(diff_bg * 0.15, 100.0) # Al menos $100 de espacio visual
+            y_range_g = [min_bg - padding_g, max_bg + padding_g]
 
             col_g1, col_g2 = st.columns([2, 1])
 
@@ -674,8 +705,6 @@ with tab_analytics:
                     mode='lines',
                     name='Balance Consolidado',
                     line=dict(color='#2962FF', width=3),
-                    fill='tozeroy',
-                    fillcolor='rgba(41, 98, 255, 0.12)',
                     hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                 ))
 
@@ -685,7 +714,7 @@ with tab_analytics:
                     plot_bgcolor='#1A1E29',
                     font=dict(color='#E0E3EB'),
                     xaxis=dict(gridcolor='#282D3C', showgrid=True),
-                    yaxis=dict(gridcolor='#282D3C', showgrid=True),
+                    yaxis=dict(gridcolor='#282D3C', showgrid=True, range=y_range_g),
                     margin=dict(l=20, r=20, t=40, b=20),
                     height=380
                 )
@@ -761,6 +790,13 @@ with tab_analytics:
                     else:
                         w_acc, l_acc, be_acc = 0, 0, 0
 
+                    # Zoom dinámico individual para la cuenta
+                    min_ba = df_acc["balance_cum"].min()
+                    max_ba = df_acc["balance_cum"].max()
+                    diff_ba = max_ba - min_ba
+                    padding_a = max(diff_ba * 0.15, 50.0)
+                    y_range_a = [min_ba - padding_a, max_ba + padding_a]
+
                     c_acc_1, c_acc_2 = st.columns([2, 1])
 
                     with c_acc_1:
@@ -771,8 +807,6 @@ with tab_analytics:
                             mode='lines',
                             name=f'Balance #{acc_num_str}',
                             line=dict(color='#2962FF', width=2.5),
-                            fill='tozeroy',
-                            fillcolor='rgba(41, 98, 255, 0.12)',
                             hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                         ))
                         fig_acc_bal.update_layout(
@@ -781,7 +815,7 @@ with tab_analytics:
                             plot_bgcolor='#1A1E29',
                             font=dict(color='#E0E3EB'),
                             xaxis=dict(gridcolor='#282D3C', showgrid=True),
-                            yaxis=dict(gridcolor='#282D3C', showgrid=True),
+                            yaxis=dict(gridcolor='#282D3C', showgrid=True, range=y_range_a),
                             margin=dict(l=20, r=20, t=40, b=20),
                             height=300
                         )
