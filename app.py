@@ -244,7 +244,6 @@ if "init_accounts_state" not in st.session_state:
             nombre_c = str(c.get("nombre_cuenta", "")).lower()
             key_c = f"chk_{acc_id}"
             
-            # Solo desmarca si explícitamente es una cuenta Nova
             if "nova" in nombre_c:
                 st.session_state[key_c] = False
             else:
@@ -429,7 +428,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO CON ESTILOS Y TONOS VERDE Y ROJO SOMBREADOS
+# TAB 1: CALENDARIO DE RESULTADOS
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -476,13 +475,11 @@ with tab_calendar:
         .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
         
-        /* FONDO Y BORDE VERDE SOMBREADO */
         .day-box.win-day { 
             background-color: #11321E !important; 
             border: 1px solid #1F5938 !important; 
         }
         
-        /* FONDO Y BORDE ROJO SOMBREADO */
         .day-box.loss-day { 
             background-color: #3C1C21 !important; 
             border: 1px solid #63272F !important; 
@@ -490,13 +487,8 @@ with tab_calendar:
         
         .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
         .day-content { text-align: right; }
-        
-        /* Cifras PnL en blanco puro */
         .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF !important; }
-        
         .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
-        
-        /* TONALIDAD DE TEXTOS VERDES Y ROJOS */
         .green-meta { color: #4ADE80 !important; font-weight: 700; }
         .red-meta { color: #EF5350 !important; font-weight: 700; }
     </style>
@@ -563,78 +555,173 @@ with tab_calendar:
     mc3.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
 # =============================================================================
-# TAB 2: GRÁFICOS Y ANALYTICS
+# TAB 2: GRÁFICOS Y ANALYTICS (NUEVO DISEÑO POR CUENTA Y RANGOS TEMPORALES)
 # =============================================================================
 with tab_analytics:
+    st.subheader("📊 Analytics y Curva de Equidad por Cuenta")
+    
     if df_ops.empty:
-        st.info("ℹ️ No hay operaciones registradas para generar las gráficas.")
+        st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        df_ops_sorted = df_ops.sort_values("fecha_dt").copy()
-        df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
-        
-        col_g1, col_g2 = st.columns([2, 1])
-        
-        with col_g1:
-            fig_equity = go.Figure()
-            fig_equity.add_trace(go.Scatter(
-                x=df_ops_sorted["fecha_dt"],
-                y=df_ops_sorted["cum_pnl"],
-                mode='lines',
-                name='PnL Acumulado',
-                line=dict(color='#2962FF', width=3),
-                fill='tozeroy',
-                fillcolor='rgba(41, 98, 255, 0.12)'
-            ))
-            fig_equity.update_layout(
-                title='<b>Evolución de la Curva de Equidad ($)</b>',
-                paper_bgcolor='#1A1E29',
-                plot_bgcolor='#1A1E29',
-                font=dict(color='#E0E3EB'),
-                xaxis=dict(gridcolor='#282D3C', showgrid=True),
-                yaxis=dict(gridcolor='#282D3C', showgrid=True),
-                margin=dict(l=20, r=20, t=40, b=20),
-                height=380
-            )
-            st.plotly_chart(fig_equity, use_container_width=True)
-            
-        with col_g2:
-            fig_donut = go.Figure(data=[go.Pie(
-                labels=['Wins', 'Losses', 'BE'],
-                values=[wins, losses, total_trades - (wins + losses)],
-                hole=.6,
-                marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
-            )])
-            fig_donut.update_layout(
-                title='<b>Distribución Win / Loss</b>',
-                paper_bgcolor='#1A1E29',
-                font=dict(color='#E0E3EB'),
-                margin=dict(l=20, r=20, t=40, b=20),
-                height=380,
-                showlegend=True
-            )
-            st.plotly_chart(fig_donut, use_container_width=True)
-            
-        daily_pnl = df_ops.groupby('fecha_dia')['resultado'].sum().reset_index()
-        daily_pnl['color'] = daily_pnl['resultado'].apply(lambda x: '#26A69A' if x >= 0 else '#EF5350')
-        
-        fig_daily = go.Figure()
-        fig_daily.add_trace(go.Bar(
-            x=daily_pnl['fecha_dia'],
-            y=daily_pnl['resultado'],
-            marker_color=daily_pnl['color'],
-            name='PnL Diario'
-        ))
-        fig_daily.update_layout(
-            title='<b>Rendimiento Diario Net ($)</b>',
-            paper_bgcolor='#1A1E29',
-            plot_bgcolor='#1A1E29',
-            font=dict(color='#E0E3EB'),
-            xaxis=dict(gridcolor='#282D3C', showgrid=True),
-            yaxis=dict(gridcolor='#282D3C', showgrid=True),
-            margin=dict(l=20, r=20, t=40, b=20),
-            height=320
+        # Filtros de periodo temporal
+        filtro_periodo = st.radio(
+            "📅 Seleccionar Rango Temporal:",
+            options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
+            index=4,
+            horizontal=True,
+            key="analytics_period_filter"
         )
-        st.plotly_chart(fig_daily, use_container_width=True)
+        
+        hoy = datetime.date.today()
+        if filtro_periodo == "Último mes":
+            fecha_limite = hoy - datetime.timedelta(days=30)
+        elif filtro_periodo == "Últimos 3 meses":
+            fecha_limite = hoy - datetime.timedelta(days=90)
+        elif filtro_periodo == "Últimos 6 meses":
+            fecha_limite = hoy - datetime.timedelta(days=180)
+        elif filtro_periodo == "Último año":
+            fecha_limite = hoy - datetime.timedelta(days=365)
+        else:
+            fecha_limite = None
+
+        df_analytics_filtered = df_ops.copy()
+        if fecha_limite:
+            df_analytics_filtered = df_analytics_filtered[df_analytics_filtered['fecha_dia'] >= fecha_limite]
+
+        if df_analytics_filtered.empty:
+            st.warning("⚠️ No se encontraron operaciones en el rango temporal seleccionado.")
+        else:
+            # 1. VISUALIZACIÓN CONSOLIDADA GLOBAL (MULTILÍNEA)
+            st.markdown("### 📈 Rendimiento Consolidado & Comparativo")
+            df_ops_sorted = df_analytics_filtered.sort_values("fecha_dt").copy()
+            df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
+
+            wins_g = len(df_analytics_filtered[df_analytics_filtered['win_loss'] == 'WIN'])
+            losses_g = len(df_analytics_filtered[df_analytics_filtered['win_loss'] == 'LOSS'])
+            be_g = len(df_analytics_filtered) - (wins_g + losses_g)
+
+            col_g1, col_g2 = st.columns([2, 1])
+
+            with col_g1:
+                fig_equity = go.Figure()
+                
+                # Línea Consolidada Total
+                fig_equity.add_trace(go.Scatter(
+                    x=df_ops_sorted["fecha_dt"],
+                    y=df_ops_sorted["cum_pnl"],
+                    mode='lines',
+                    name='Total Consolidado',
+                    line=dict(color='#2962FF', width=3.5),
+                    fill='tozeroy',
+                    fillcolor='rgba(41, 98, 255, 0.10)'
+                ))
+                
+                # Trazas individuales por cuenta seleccionada
+                palette_colors = ['#26A69A', '#EF5350', '#FFB74D', '#AB47BC', '#26C6DA', '#7E57C2', '#EC407A']
+                for idx_acc, c_acc in enumerate(cuentas):
+                    acc_num_str = str(c_acc["account_number"])
+                    df_acc_ops = df_ops_sorted[df_ops_sorted["account_number"].astype(str) == acc_num_str].copy()
+                    if not df_acc_ops.empty:
+                        df_acc_ops["cum_pnl_acc"] = df_acc_ops["resultado"].cumsum()
+                        c_color = palette_colors[idx_acc % len(palette_colors)]
+                        fig_equity.add_trace(go.Scatter(
+                            x=df_acc_ops["fecha_dt"],
+                            y=df_acc_ops["cum_pnl_acc"],
+                            mode='lines',
+                            name=f"{c_acc['nombre_cuenta']} (#{acc_num_str})",
+                            line=dict(color=c_color, width=1.8, dash='dot')
+                        ))
+
+                fig_equity.update_layout(
+                    title=f'<b>Evolución de Equidad Global ({filtro_periodo})</b>',
+                    paper_bgcolor='#1A1E29',
+                    plot_bgcolor='#1A1E29',
+                    font=dict(color='#E0E3EB'),
+                    xaxis=dict(gridcolor='#282D3C', showgrid=True),
+                    yaxis=dict(gridcolor='#282D3C', showgrid=True),
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=380,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                st.plotly_chart(fig_equity, use_container_width=True)
+
+            with col_g2:
+                fig_donut = go.Figure(data=[go.Pie(
+                    labels=['Wins', 'Losses', 'BE'],
+                    values=[wins_g, losses_g, be_g],
+                    hole=.6,
+                    marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
+                )])
+                fig_donut.update_layout(
+                    title='<b>Distribución Win / Loss Global</b>',
+                    paper_bgcolor='#1A1E29',
+                    font=dict(color='#E0E3EB'),
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=380,
+                    showlegend=True
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
+
+            # 2. DESGLOSE INDIVIDUAL PARA CADA CUENTA SELECCIONADA
+            st.divider()
+            st.markdown("### 🏢 Evolución & Distribución por Cuenta Individual")
+            
+            for c_acc in cuentas:
+                acc_num_str = str(c_acc["account_number"])
+                acc_name = c_acc["nombre_cuenta"]
+                
+                df_acc = df_analytics_filtered[df_analytics_filtered["account_number"].astype(str) == acc_num_str].sort_values("fecha_dt").copy()
+                
+                with st.expander(f"🔹 **{acc_name}** (`#{acc_num_str}`) — Curva & Win/Loss ({filtro_periodo})", expanded=True):
+                    if df_acc.empty:
+                        st.info("Sin operaciones registradas para esta cuenta en el periodo seleccionado.")
+                    else:
+                        df_acc["cum_pnl"] = df_acc["resultado"].cumsum()
+                        w_acc = len(df_acc[df_acc['win_loss'] == 'WIN'])
+                        l_acc = len(df_acc[df_acc['win_loss'] == 'LOSS'])
+                        be_acc = len(df_acc) - (w_acc + l_acc)
+
+                        c_acc_1, c_acc_2 = st.columns([2, 1])
+
+                        with c_acc_1:
+                            fig_acc_eq = go.Figure()
+                            fig_acc_eq.add_trace(go.Scatter(
+                                x=df_acc["fecha_dt"],
+                                y=df_acc["cum_pnl"],
+                                mode='lines',
+                                name=f'PnL #{acc_num_str}',
+                                line=dict(color='#2962FF', width=2.5),
+                                fill='tozeroy',
+                                fillcolor='rgba(41, 98, 255, 0.12)'
+                            ))
+                            fig_acc_eq.update_layout(
+                                title=f'<b>Curva de Equidad — {acc_name} (#{acc_num_str})</b>',
+                                paper_bgcolor='#1A1E29',
+                                plot_bgcolor='#1A1E29',
+                                font=dict(color='#E0E3EB'),
+                                xaxis=dict(gridcolor='#282D3C', showgrid=True),
+                                yaxis=dict(gridcolor='#282D3C', showgrid=True),
+                                margin=dict(l=20, r=20, t=40, b=20),
+                                height=300
+                            )
+                            st.plotly_chart(fig_acc_eq, use_container_width=True)
+
+                        with c_acc_2:
+                            fig_acc_donut = go.Figure(data=[go.Pie(
+                                labels=['Wins', 'Losses', 'BE'],
+                                values=[w_acc, l_acc, be_acc],
+                                hole=.6,
+                                marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
+                            )])
+                            fig_acc_donut.update_layout(
+                                title=f'<b>Win/Loss — {acc_name}</b>',
+                                paper_bgcolor='#1A1E29',
+                                font=dict(color='#E0E3EB'),
+                                margin=dict(l=20, r=20, t=40, b=20),
+                                height=300,
+                                showlegend=True
+                            )
+                            st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
 # TAB 3: ESTADO DE CUENTAS
@@ -917,7 +1004,7 @@ with tab_trades:
                     res_html = f"<span class='green-text'>+${res_num:,.2f}</span>"
                     pct_html = f"<span class='green-text'>+{pct_num:.2f}%</span>"
                 elif clasif == "LOSS":
-                    badge = f"ff0000 LOSS ({num_caps})"
+                    badge = f"🟥 LOSS ({num_caps})"
                     res_html = f"<span class='red-text'>-${abs(res_num):,.2f}</span>"
                     pct_html = f"<span class='red-text'>{pct_num:.2f}%</span>"
                 else:
