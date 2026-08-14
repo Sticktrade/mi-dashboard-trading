@@ -214,7 +214,7 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE CON PERSISTENCIA Y DESPLEGABLES CONTRAÍDOS
+# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE CON PERSISTENCIA Y EXCLUSIÓN DE ORION
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -235,6 +235,10 @@ if cuentas_raw:
             grupos_cuentas[nombre] = []
         grupos_cuentas[nombre].append(c)
 
+# Lectura de parámetros guardados en la URL
+saved_accs_param = st.query_params.get("accs", None)
+saved_ids = set(saved_accs_param.split(",")) if saved_accs_param else None
+
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
     if cuentas_raw:
@@ -242,6 +246,7 @@ if col_b1.button("Todas", use_container_width=True):
             st.session_state[f"chk_{c['account_number']}"] = True
         for grp_n in grupos_cuentas.keys():
             st.session_state[f"master_{grp_n}"] = True
+        st.query_params["accs"] = ",".join([str(c['account_number']) for c in cuentas_raw])
         st.rerun()
 
 if col_b2.button("Ninguna", use_container_width=True):
@@ -250,6 +255,7 @@ if col_b2.button("Ninguna", use_container_width=True):
             st.session_state[f"chk_{c['account_number']}"] = False
         for grp_n in grupos_cuentas.keys():
             st.session_state[f"master_{grp_n}"] = False
+        st.query_params["accs"] = ""
         st.rerun()
 
 st.sidebar.markdown("<br>", unsafe_allow_html=True)
@@ -258,40 +264,49 @@ cuentas_seleccionadas_ids = []
 
 if cuentas_raw:
     for nombre_grp, lista_accs in grupos_cuentas.items():
+        child_ids = [str(a["account_number"]) for a in lista_accs]
+
+        # Comprobar si pertenece a Orion Funded Nova
+        es_orion = "orion" in nombre_grp.lower()
+
+        # Inicialización de estado para cada subcuenta
+        for acc in lista_accs:
+            acc_id = str(acc["account_number"])
+            key = f"chk_{acc_id}"
+            es_acc_orion = es_orion or ("orion" in str(acc.get("nombre_cuenta", "")).lower())
+
+            if key not in st.session_state:
+                if saved_ids is not None:
+                    st.session_state[key] = (acc_id in saved_ids)
+                else:
+                    # Desmarcar por defecto si es Orion Funded Nova
+                    st.session_state[key] = not es_acc_orion
+
+        master_key = f"master_{nombre_grp}"
+        if master_key not in st.session_state:
+            st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
+
+        def make_callbacks(grp_k=master_key, c_ids=child_ids):
+            def on_m_change():
+                m_val = st.session_state[grp_k]
+                for cid in c_ids:
+                    st.session_state[f"chk_{cid}"] = m_val
+            def on_c_change():
+                st.session_state[grp_k] = all(st.session_state.get(f"chk_{cid}", False) for cid in c_ids)
+            return on_m_change, on_c_change
+
+        cb_master, cb_child = make_callbacks()
+
         if len(lista_accs) == 1:
             acc = lista_accs[0]
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
             
-            if key not in st.session_state:
-                st.session_state[key] = True
-                
             label = f"{acc['nombre_cuenta']} — ${acc['balance']:,.2f}"
             if st.sidebar.checkbox(label, value=st.session_state[key], key=key):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
-            child_ids = [str(a["account_number"]) for a in lista_accs]
             tot_bal_grp = sum([a["balance"] for a in lista_accs])
-            master_key = f"master_{nombre_grp}"
-            
-            for cid in child_ids:
-                if f"chk_{cid}" not in st.session_state:
-                    st.session_state[f"chk_{cid}"] = True
-            
-            if master_key not in st.session_state:
-                st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", True) for cid in child_ids)
-
-            def make_callbacks(grp_k=master_key, c_ids=child_ids):
-                def on_m_change():
-                    m_val = st.session_state[grp_k]
-                    for cid in c_ids:
-                        st.session_state[f"chk_{cid}"] = m_val
-                def on_c_change():
-                    st.session_state[grp_k] = all(st.session_state.get(f"chk_{cid}", True) for cid in c_ids)
-                return on_m_change, on_c_change
-
-            cb_master, cb_child = make_callbacks()
-
             master_label = f"{nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}"
             st.sidebar.checkbox(
                 master_label, 
@@ -313,6 +328,9 @@ if cuentas_raw:
                         on_change=cb_child
                     ):
                         cuentas_seleccionadas_ids.append(acc_id)
+
+    # Actualizar parámetros en la URL para recordar la selección tras F5
+    st.query_params["accs"] = ",".join(cuentas_seleccionadas_ids)
 
 else:
     st.sidebar.info("Cargando cuentas...")
@@ -418,7 +436,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO VISUAL
+# TAB 1: CALENDARIO VISUAL CON TONOS VERDE (#26A69A) Y ROJO (#EF5350) EXACTOS
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -461,13 +479,31 @@ with tab_calendar:
         .week-pct.red { color: #EF5350; }
         .week-pct.neutral { color: #787B86; }
         .week-val { font-size: 17px; font-weight: 800; margin-top: 4px; color: #FFFFFF; }
+        
         .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
-        .day-box.win-day { background: linear-gradient(180deg, rgba(38, 166, 154, 0.3) 0%, rgba(38, 166, 154, 0.08) 100%); border: 1px solid rgba(38, 166, 154, 0.5); }
-        .day-box.loss-day { background: linear-gradient(180deg, rgba(239, 83, 80, 0.3) 0%, rgba(239, 83, 80, 0.08) 100%); border: 1px solid rgba(239, 83, 80, 0.5); }
+        
+        /* Días Verdes: Fondo y borde basados en #26A69A */
+        .day-box.win-day { 
+            background: rgba(38, 166, 154, 0.18) !important; 
+            border: 1px solid #26A69A !important; 
+        }
+        .day-box.win-day .day-pnl { 
+            color: #26A69A !important; 
+        }
+        
+        /* Días Rojos: Fondo y borde basados en #EF5350 */
+        .day-box.loss-day { 
+            background: rgba(239, 83, 80, 0.18) !important; 
+            border: 1px solid #EF5350 !important; 
+        }
+        .day-box.loss-day .day-pnl { 
+            color: #EF5350 !important; 
+        }
+        
         .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
         .day-content { text-align: right; }
-        .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF; }
+        .day-pnl { font-size: 13px; font-weight: 800; }
         .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
         .green-meta { color: #26A69A; font-weight: 700; }
         .red-meta { color: #EF5350; font-weight: 700; }
@@ -714,14 +750,12 @@ with tab_trades:
     st.subheader("📖 Historial & Analítica de Operaciones")
     st.caption("Filtra y revisa las sesiones por fecha, cuenta y estado.")
     
-    # CALCULAMOS LA SEMANA EN CURSO POR DEFECTO (LUNES A HOY)
     hoy = datetime.date.today()
     lunes_semana_actual = hoy - datetime.timedelta(days=hoy.weekday())
     
     col_f1, col_f2 = st.columns([2, 2])
     
     with col_f1:
-        # date_input libre sin min_value/max_value para habilitar el selector de año libre
         rango_fechas = st.date_input(
             "📅 Rango de Fechas:",
             value=(lunes_semana_actual, hoy),
@@ -768,7 +802,6 @@ with tab_trades:
                 
         df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar_resultado)
         
-        # FILTRADO DE FECHAS SEGURO
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
             f_start, f_end = rango_fechas[0], rango_fechas[1]
             df_filtered_tab4 = df_diario[(df_diario["fecha_dia"] >= f_start) & (df_diario["fecha_dia"] <= f_end)]
