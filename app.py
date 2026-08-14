@@ -166,11 +166,60 @@ except Exception as e:
     st.error(f"Error conectando a la base de datos: {e}")
     st.stop()
 
+def process_raw_operations(ops_list):
+    """
+    Procesa de manera insensible a mayúsculas/minúsculas todos los registros de la DB.
+    Garantiza que 'resultado' sea el Resultado Neto = Ganancia Bruta - |Comisión| + Swap.
+    """
+    if not ops_list:
+        return []
+    
+    processed_ops = []
+    for op in ops_list:
+        op_dict = dict(op)
+        
+        def get_val(possible_keys):
+            for k in op_dict.keys():
+                clean_k = str(k).strip().lower()
+                if clean_k in possible_keys:
+                    val = op_dict[k]
+                    if val is not None and str(val).strip() != "":
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            pass
+            return 0.0
+
+        profit_keys = ['resultado', 'profit', 'ganancia', 'pnl', 'net_profit', 'raw_profit', 'beneficio', 'monto']
+        raw_profit = get_val(profit_keys)
+        
+        comm_keys = ['comision', 'comisiones', 'commission', 'commissions', 'comm', 'fee', 'fees', 'total_commission', 'commission_fee', 'comision_mt5', 'comision_mt4']
+        comm_val = get_val(comm_keys)
+        
+        swap_keys = ['swap', 'swaps', 'rollover', 'swap_mt4', 'swap_mt5']
+        swap_val = get_val(swap_keys)
+        
+        net_result = raw_profit - abs(comm_val) + swap_val
+        
+        op_dict['raw_profit'] = raw_profit
+        op_dict['comision_calc'] = abs(comm_val)
+        op_dict['swap_calc'] = swap_val
+        op_dict['resultado'] = net_result
+        
+        processed_ops.append(op_dict)
+        
+    return processed_ops
+
 @st.cache_data(ttl=3)
 def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
     res_ops = supabase.table("operaciones").select("*").order("fecha", desc=True).execute()
-    return res_cuentas.data, res_ops.data
+    
+    ops_data = res_ops.data
+    if ops_data:
+        ops_data = process_raw_operations(ops_data)
+        
+    return res_cuentas.data, ops_data
 
 cuentas_raw, ops_raw = cargar_datos()
 
@@ -195,40 +244,6 @@ def update_op_capturas(op_row, new_capturas_list):
         acc_num = op_row.get("account_number")
         fecha_val = op_row.get("fecha")
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
-
-def calcular_resultado_neto(df):
-    """
-    Garantiza el cálculo del Resultado Neto descontando Comisiones y Swaps.
-    Resultado Neto = Resultado Bruto - |Comisión| + Swap
-    """
-    if df.empty:
-        return df
-    
-    profit_col = None
-    for c in ['resultado', 'profit', 'ganancia', 'pnl']:
-        if c in df.columns:
-            profit_col = c
-            break
-            
-    if profit_col is None:
-        return df
-
-    df['raw_profit'] = pd.to_numeric(df[profit_col], errors='coerce').fillna(0.0)
-    
-    comm_series = pd.Series(0.0, index=df.index)
-    for c in ['comision', 'comisiones', 'commission', 'comm', 'fee', 'fees']:
-        if c in df.columns:
-            comm_series = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
-            break
-            
-    swap_series = pd.Series(0.0, index=df.index)
-    for c in ['swap', 'swaps']:
-        if c in df.columns:
-            swap_series = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
-            break
-            
-    df['resultado'] = df['raw_profit'] - comm_series.abs() + swap_series
-    return df
 
 def obtener_df_diario_clasificado(df_input, cuentas_lista):
     """
@@ -401,14 +416,9 @@ else:
 
 df_ops = pd.DataFrame(ops_raw) if ops_raw else pd.DataFrame()
 
-# CÁLCULO GLOBAL DE RESULTADO NETO (CON COMISIONES Y SWAPS)
 if not df_ops.empty:
     df_ops['fecha_dt'] = pd.to_datetime(df_ops['fecha'])
     df_ops['fecha_dia'] = df_ops['fecha_dt'].dt.date
-    
-    # Descontar comisiones y sumar swaps
-    df_ops = calcular_resultado_neto(df_ops)
-
     if cuentas_seleccionadas_ids:
         df_ops = df_ops[df_ops["account_number"].astype(str).isin(cuentas_seleccionadas_ids)]
     else:
@@ -688,11 +698,11 @@ with tab_analytics:
             else:
                 wins_g, losses_g, be_g = 0, 0, 0
 
-            # Cálculo de zoom dinámico en el eje Y
+            # Zoom dinámico eje Y
             min_bg = df_ops_sorted["balance_cum"].min()
             max_bg = df_ops_sorted["balance_cum"].max()
             diff_bg = max_bg - min_bg
-            padding_g = max(diff_bg * 0.15, 100.0) # Al menos $100 de espacio visual
+            padding_g = max(diff_bg * 0.15, 100.0)
             y_range_g = [min_bg - padding_g, max_bg + padding_g]
 
             col_g1, col_g2 = st.columns([2, 1])
@@ -1117,7 +1127,15 @@ with tab_trades:
                 with c6:
                     with st.popover(badge, use_container_width=True):
                         st.markdown(f"### 📊 Sesión: {acc_name} (`#{acc_id_str}`)")
-                        st.markdown(f"**Fecha:** `{f_str}` | **Resultado:** {res_html} ({pct_html})", unsafe_allow_html=True)
+                        st.markdown(f"**Fecha:** `{f_str}` | **Resultado Neto:** {res_html} ({pct_html})", unsafe_allow_html=True)
+                        
+                        tot_comm = sum([float(op.get("comision_calc", 0)) for op in matching_ops])
+                        tot_swap = sum([float(op.get("swap_calc", 0)) for op in matching_ops])
+                        raw_prof = sum([float(op.get("raw_profit", 0)) for op in matching_ops])
+                        
+                        if tot_comm > 0 or tot_swap != 0:
+                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
+                            
                         st.markdown("---")
                         
                         # GALERÍA DE CAPTURAS
