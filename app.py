@@ -214,7 +214,7 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE Y EXCLUSIÓN DE ORION
+# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE Y EXCLUSIÓN EXCLUSIVA DE NOVA
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -235,7 +235,7 @@ if cuentas_raw:
             grupos_cuentas[nombre] = []
         grupos_cuentas[nombre].append(c)
 
-# INICIALIZACIÓN DE ESTADO PRIMARIA (EXCLUYE ORION POR DEFECTO)
+# INICIALIZACIÓN DE ESTADO: SOLO DESMARCA LAS CUENTAS "NOVA"
 if "init_accounts_state" not in st.session_state:
     st.session_state["init_accounts_state"] = True
     if cuentas_raw:
@@ -244,7 +244,8 @@ if "init_accounts_state" not in st.session_state:
             nombre_c = str(c.get("nombre_cuenta", "")).lower()
             key_c = f"chk_{acc_id}"
             
-            if "orion" in nombre_c:
+            # Solo desmarca si explícitamente es una cuenta Nova
+            if "nova" in nombre_c:
                 st.session_state[key_c] = False
             else:
                 st.session_state[key_c] = True
@@ -428,7 +429,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO CON NÚMEROS EN BLANCO (#FFFFFF) Y FONDOS EXACTOS (#26A69A / #EF5350)
+# TAB 1: CALENDARIO CON ESTILOS Y TONOS EXACTOS DE LA CAPTURA
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -467,35 +468,37 @@ with tab_calendar:
         .week-summary-card { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
         .week-title { font-size: 11px; color: #A3A6AF; font-weight: 600; }
         .week-pct { font-size: 11px; font-weight: 700; margin-left: 4px; }
-        .week-pct.green { color: #26A69A; }
-        .week-pct.red { color: #EF5350; }
+        .week-pct.green { color: #4ADE80 !important; }
+        .week-pct.red { color: #EF5350 !important; }
         .week-pct.neutral { color: #787B86; }
         .week-val { font-size: 17px; font-weight: 800; margin-top: 4px; color: #FFFFFF; }
         
         .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
         
-        /* Días Verdes: Fondo opaco con tono #26A69A y borde solido */
+        /* FONDO Y BORDE VERDE SOMBREADO IGUAL A LA CAPTURA 1 */
         .day-box.win-day { 
-            background: rgba(38, 166, 154, 0.22) !important; 
-            border: 1px solid #26A69A !important; 
+            background-color: #11321E !important; 
+            border: 1px solid #1F5938 !important; 
         }
         
-        /* Días Rojos: Fondo opaco con tono #EF5350 y borde solido */
+        /* FONDO Y BORDE ROJO SOMBREADO IGUAL A LA CAPTURA 1 */
         .day-box.loss-day { 
-            background: rgba(239, 83, 80, 0.22) !important; 
-            border: 1px solid #EF5350 !important; 
+            background-color: #3C1C21 !important; 
+            border: 1px solid #63272F !important; 
         }
         
         .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
         .day-content { text-align: right; }
         
-        /* Números PnL SIEMPRE en Blanco Puro como solicitaste */
+        /* Cifras PnL en blanco puro */
         .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF !important; }
         
         .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
-        .green-meta { color: #26A69A; font-weight: 700; }
-        .red-meta { color: #EF5350; font-weight: 700; }
+        
+        /* TONALIDAD DE TEXTOS VERDES Y ROJOS IGUAL A LA CAPTURA 1 */
+        .green-meta { color: #4ADE80 !important; font-weight: 700; }
+        .red-meta { color: #EF5350 !important; font-weight: 700; }
     </style>
     """
     
