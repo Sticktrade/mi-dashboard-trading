@@ -168,7 +168,7 @@ except Exception as e:
 
 def process_raw_operations(ops_list):
     """
-    Escanea la estructura de datos sin importar cómo estén nombradas las columnas.
+    Busca cualquier columna que contenga información de comisiones o swaps en Supabase.
     Calcula: Resultado Neto = Ganancia Bruta - |Comisión| + Swap
     """
     if not ops_list:
@@ -294,7 +294,7 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE Y EXCLUSIÓN EXCLUSIVA DE NOVA
+# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE Y INSPECTOR
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -306,21 +306,26 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
     st.rerun()
 
 # -----------------------------------------------------------------------------
-# HERRAMIENTA DE DIAGNÓSTICO EN TIEMPO REAL (INSPECTOR DE SUPABASE)
+# HERRAMIENTA DE DIAGNÓSTICO EN TIEMPO REAL
 # -----------------------------------------------------------------------------
-with st.sidebar.expander("🛠️ Inspector de Supabase (Diagnóstico)", expanded=False):
+with st.sidebar.expander("🛠️ Inspector de Datos Supabase", expanded=False):
     if ops_raw:
         sample_op = ops_raw[0]
-        st.caption("Columnas encontradas en `operaciones`:")
+        st.caption("Columnas en tu tabla `operaciones`:")
         st.code(list(sample_op.keys()))
         
-        st.caption("Columna de comisión detectada:")
-        st.info(f"🔑 `{sample_op.get('comm_column_found', 'Ninguna')}` (Valor: `${sample_op.get('comision_calc', 0.0):,.2f}`) ")
+        comm_col_detected = sample_op.get('comm_column_found', 'Ninguna')
+        comm_val_detected = sample_op.get('comision_calc', 0.0)
         
-        if st.checkbox("Ver primer registro en JSON crudo"):
-            st.json(sample_op)
+        st.markdown(f"• Columna comisión: `{comm_col_detected}`")
+        st.markdown(f"• Valor leído: `${comm_val_detected:,.2f}`")
+        
+        if comm_val_detected == 0.0:
+            st.info("ℹ️ Esperando nuevas operaciones registradas por el EA.")
+        else:
+            st.success(f"✅ Comisiones registradas y activas.")
     else:
-        st.warning("No se recibieron datos de la tabla operaciones.")
+        st.warning("No se recibieron operaciones de Supabase.")
 
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
@@ -440,7 +445,7 @@ if not df_ops.empty:
         df_ops = pd.DataFrame()
 
 # -----------------------------------------------------------------------------
-# 4. ENCABEZADO Y KPI CARDS (WIN RATE BASADO EN HISTORIAL DEL APLICATIVO)
+# 4. ENCABEZADO Y KPI CARDS
 # -----------------------------------------------------------------------------
 st.title("📈 StickTrade — Dashboard")
 st.caption("Visión consolidada y métricas de rendimiento en tiempo real.")
@@ -1151,7 +1156,7 @@ with tab_trades:
                         if tot_comm > 0 or tot_swap != 0:
                             st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
                         else:
-                            st.caption("ℹ️ Sin comisiones/swaps registrados en Supabase para esta sesión.")
+                            st.info("ℹ️ Registro sin comisiones adicionales.")
                             
                         st.markdown("---")
                         
