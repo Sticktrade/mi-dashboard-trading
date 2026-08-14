@@ -1,4 +1,6 @@
+import os
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -140,6 +142,109 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# 1.5 COMPONENTE NATIVO PARA PEGADO DE IMÁGENES PESADAS (WEBSOCKET BRIDGE)
+# -----------------------------------------------------------------------------
+@st.cache_resource
+def get_paste_component():
+    # Creamos un componente nativo dinámico. Esto envía la imagen pesada por un canal limpio sin colgar el navegador.
+    comp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paste_component_nativ")
+    os.makedirs(comp_dir, exist_ok=True)
+    
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: transparent; }
+            .paste-area {
+                background-color: #1A1E29;
+                border: 2px dashed #2962FF;
+                border-radius: 8px;
+                text-align: center;
+                cursor: pointer;
+                outline: none;
+                transition: all 0.2s ease;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 95vh;
+                box-sizing: border-box;
+            }
+            .paste-area:hover, .paste-area:focus {
+                background-color: #222736;
+                border-color: #3D72FF;
+                box-shadow: 0 0 10px rgba(41, 98, 255, 0.3);
+            }
+            .title { font-size: 13px; font-weight: 700; color: #2962FF; margin: 0; pointer-events: none; }
+            .subtitle { font-size: 11px; color: #787B86; margin-top: 4px; pointer-events: none; }
+            .status { font-size: 12px; color: #26A69A; margin-top: 6px; font-weight: 700; display: none; pointer-events: none; }
+        </style>
+    </head>
+    <body>
+        <div class="paste-area" id="box" tabindex="0">
+            <div class="title">📋 HAZ CLIC AQUÍ Y PRESIONA CTRL + V</div>
+            <div class="subtitle">Pegado nativo (Soporta imágenes pesadas en Brave/Chrome)</div>
+            <div class="status" id="status">✅ Captura enviada. Procesando...</div>
+        </div>
+
+        <script>
+            function sendToStreamlit(type, data) {
+                window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: type,
+                    ...data
+                }, "*");
+            }
+
+            function init() {
+                sendToStreamlit("streamlit:setComponentReady", {apiVersion: 1});
+                sendToStreamlit("streamlit:setFrameHeight", {height: 95});
+            }
+
+            window.addEventListener("message", function(event) {
+                if (event.data.type === "streamlit:render") {
+                    sendToStreamlit("streamlit:setFrameHeight", {height: 95});
+                }
+            });
+
+            document.getElementById('box').addEventListener('paste', function(e) {
+                const clipboardData = e.clipboardData || window.clipboardData;
+                if (!clipboardData) return;
+                const items = clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        const blob = items[i].getAsFile();
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            document.getElementById('status').style.display = 'block';
+                            document.getElementById('box').style.borderColor = '#26A69A';
+                            // Enviar datos por el websocket oficial de Streamlit
+                            sendToStreamlit("streamlit:setComponentValue", {value: event.target.result});
+                        };
+                        reader.readAsDataURL(blob);
+                        e.preventDefault();
+                        break;
+                    }
+                }
+            });
+
+            init();
+        </script>
+    </body>
+    </html>
+    """
+    
+    html_path = os.path.join(comp_dir, "index.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+        
+    return components.declare_component("paste_component_nativ", path=comp_dir)
+
+st_paste = get_paste_component()
 
 # -----------------------------------------------------------------------------
 # 2. CONEXIÓN A SUPABASE Y FUNCIONES AUXILIARES
@@ -815,12 +920,11 @@ with tab_trades:
             st.divider()
             
             # -----------------------------------------------------------------
-            # TABLA LIMPIA EXACTA ESTILO NOTION (FILAS ALINEADAS POR COLUMNAS)
+            # TABLA LIMPIA EXACTA ESTILO NOTION
             # -----------------------------------------------------------------
             st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
             st.caption("Tabla de historial alineada. Haz clic en el botón de estado para abrir las capturas.")
             
-            # Encabezado de la Tabla
             hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
             hdr_c1.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>FECHA</span>", unsafe_allow_html=True)
             hdr_c2.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>CUENTA</span>", unsafe_allow_html=True)
@@ -831,7 +935,6 @@ with tab_trades:
             
             st.markdown("<hr style='margin: 6px 0 10px 0; border-color: #282D3C;'>", unsafe_allow_html=True)
 
-            # Renderizado de Filas
             list_sessions = df_filtered_tab4.to_dict("records")
             
             for idx, row in enumerate(list_sessions):
@@ -919,7 +1022,6 @@ with tab_trades:
                         else:
                             st.info("No hay capturas adjuntas aún para esta sesión.")
 
-                        # Zoom
                         zoom_data = st.session_state.get(f"active_zoom_{row_key}")
                         if zoom_data:
                             st.markdown("---")
@@ -930,112 +1032,43 @@ with tab_trades:
                                 del st.session_state[f"active_zoom_{row_key}"]
                                 st.rerun()
 
-                        # ZONA DE SUBIDA DIRECTA CON CTRL + V (ESTILO NOTION CON PUENTE DE URL)
+                        # ZONA DE SUBIDA CON WEBSOCKET
                         st.markdown("---")
                         st.markdown("##### 📤 Adjuntar Nueva Captura")
                         
                         tipo_f = st.selectbox("Tipo / Etiqueta:", ["Contexto (TF Mayor)", "Entrada / Ejecución", "Salida / PnL", "Otro"], key=f"sel_tipo_f_{row_key}")
                         nota_f = st.text_input("Nota técnica:", placeholder="Ej: Ruptura de estructura en POI", key=f"inp_nota_f_{row_key}")
 
-                        # Capturar imagen si viene por URL (Query Param)
-                        param_key = f"pasted_img_{row_key}"
-                        if param_key in st.query_params:
-                            st.session_state[f"active_b64_{row_key}"] = st.query_params[param_key]
-                            st.query_params.clear()
-                            st.rerun()
+                        # Gestión de llaves para resetear el cuadro después de guardar
+                        reset_key = f"reset_paste_{row_key}"
+                        if reset_key not in st.session_state:
+                            st.session_state[reset_key] = 0
+                            
+                        # El componente nativo se ejecuta y devuelve directamente el texto pesado de forma segura
+                        b64_val = st_paste(key=f"paste_{row_key}_{st.session_state[reset_key]}")
 
-                        current_b64 = st.session_state.get(f"active_b64_{row_key}")
-
-                        # Componente JavaScript robusto con recarga por URL
-                        html_brave_paste = f"""
-                        <div id="box_{row_key}" style="
-                            background-color: #1A1E29;
-                            border: 2px dashed #2962FF;
-                            border-radius: 8px;
-                            padding: 16px;
-                            text-align: center;
-                            cursor: pointer;
-                            position: relative;
-                            transition: all 0.2s ease;">
-                            <textarea id="area_{row_key}" style="
-                                position: absolute;
-                                top: 0; left: 0; width: 100%; height: 100%;
-                                opacity: 0.01; cursor: pointer; border: none; outline: none;"
-                                autofocus placeholder="Pega aquí..."></textarea>
-                            <p style="font-size: 13px; font-weight: 700; color: #2962FF; margin: 0;">
-                                📋 HAZ CLIC AQUÍ Y PRESIONA CTRL + V
-                            </p>
-                            <p style="font-size: 11px; color: #787B86; margin-top: 4px;">
-                                Pegado instantáneo (Brave / Chrome / Edge)
-                            </p>
-                            <p id="msg_{row_key}" style="font-size: 12px; color: #26A69A; margin-top: 6px; font-weight: 700; display: none;">
-                                ✅ Captura detectada. Cargando...
-                            </p>
-                        </div>
-
-                        <script>
-                            (function() {{
-                                const area = document.getElementById('area_{row_key}');
-                                const msg = document.getElementById('msg_{row_key}');
-                                const box = document.getElementById('box_{row_key}');
-
-                                area.addEventListener('paste', function(e) {{
-                                    const clipboardData = e.clipboardData || window.clipboardData;
-                                    if (!clipboardData) return;
-                                    const items = clipboardData.items;
-                                    if (!items) return;
-
-                                    for (let i = 0; i < items.length; i++) {{
-                                        if (items[i].type.indexOf('image') !== -1) {{
-                                            const blob = items[i].getAsFile();
-                                            const reader = new FileReader();
-                                            reader.onload = function(event) {{
-                                                const base64Data = event.target.result;
-                                                msg.style.display = 'block';
-                                                box.style.borderColor = '#26A69A';
-                                                
-                                                // Enviar mediante parámetro en URL al contenedor principal
-                                                const url = new URL(window.parent.location.href);
-                                                url.searchParams.set('{param_key}', base64Data);
-                                                window.parent.location.href = url.toString();
-                                            }};
-                                            reader.readAsDataURL(blob);
-                                            e.preventDefault();
-                                            break;
-                                        }}
-                                    }}
-                                }});
-                            }})();
-                        </script>
-                        """
-                        
-                        st.components.v1.html(html_brave_paste, height=100)
-
-                        if current_b64:
-                            st.image(current_b64, caption="✅ Previsualización de la captura pegada", use_container_width=True)
-                            if st.button("🗑️ Quitar imagen actual", key=f"clear_b64_{row_key}", use_container_width=True):
-                                del st.session_state[f"active_b64_{row_key}"]
-                                st.rerun()
+                        if b64_val:
+                            st.image(b64_val, caption="✅ Previsualización de la captura pegada", use_container_width=True)
 
                         if st.button("💾 Guardar Captura Pegada", key=f"btn_save_f_{row_key}", use_container_width=True):
-                            if current_b64:
+                            if b64_val:
                                 nueva_c = {
                                     "tipo": tipo_f,
                                     "nota": nota_f,
-                                    "url": current_b64,
+                                    "url": b64_val,
                                     "fecha_subida": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                                 }
                                 capturas_list.append(nueva_c)
                                 try:
                                     update_op_capturas(op_row, capturas_list)
-                                    if f"active_b64_{row_key}" in st.session_state:
-                                        del st.session_state[f"active_b64_{row_key}"]
-                                    st.success("¡Imagen guardada con éxito!")
+                                    # Reseteamos el recuadro para que vuelva a quedar limpio
+                                    st.session_state[reset_key] += 1
+                                    st.success("¡Imagen guardada con éxito en Supabase!")
                                     st.cache_data.clear()
                                     st.rerun()
                                 except Exception as ex_f:
-                                    st.error(f"Error al guardar en Supabase: {ex_f}")
+                                    st.error(f"Error al guardar: {ex_f}")
                             else:
-                                st.warning("Haz clic en el recuadro y presiona Ctrl + V primero.")
+                                st.warning("Haz clic en el recuadro de arriba y presiona Ctrl + V primero.")
                 
                 st.markdown("<hr style='margin: 4px 0; border-color: #1E222E;'>", unsafe_allow_html=True)
