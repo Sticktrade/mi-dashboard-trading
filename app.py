@@ -168,8 +168,8 @@ except Exception as e:
 
 def process_raw_operations(ops_list):
     """
-    Procesa de manera insensible a mayúsculas/minúsculas todos los registros de la DB.
-    Garantiza que 'resultado' sea el Resultado Neto = Ganancia Bruta - |Comisión| + Swap.
+    Escanea la estructura de datos sin importar cómo estén nombradas las columnas.
+    Calcula: Resultado Neto = Ganancia Bruta - |Comisión| + Swap
     """
     if not ops_list:
         return []
@@ -178,34 +178,36 @@ def process_raw_operations(ops_list):
     for op in ops_list:
         op_dict = dict(op)
         
-        def get_val(possible_keys):
-            for k in op_dict.keys():
-                clean_k = str(k).strip().lower()
-                if clean_k in possible_keys:
-                    val = op_dict[k]
-                    if val is not None and str(val).strip() != "":
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            pass
-            return 0.0
+        def find_val(candidates):
+            for k, v in op_dict.items():
+                clean_k = str(k).strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+                for cand in candidates:
+                    clean_cand = cand.strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+                    if clean_k == clean_cand:
+                        if v is not None and str(v).strip() != "":
+                            try:
+                                v_clean = str(v).replace("$", "").replace(",", "").strip()
+                                return k, float(v_clean)
+                            except (ValueError, TypeError):
+                                pass
+            return None, 0.0
 
-        profit_keys = ['resultado', 'profit', 'ganancia', 'pnl', 'net_profit', 'raw_profit', 'beneficio', 'monto']
-        raw_profit = get_val(profit_keys)
-        
-        comm_keys = ['comision', 'comisiones', 'commission', 'commissions', 'comm', 'fee', 'fees', 'total_commission', 'commission_fee', 'comision_mt5', 'comision_mt4']
-        comm_val = get_val(comm_keys)
-        
-        swap_keys = ['swap', 'swaps', 'rollover', 'swap_mt4', 'swap_mt5']
-        swap_val = get_val(swap_keys)
-        
+        profit_keys = ['resultado', 'profit', 'ganancia', 'pnl', 'netprofit', 'rawprofit', 'beneficio', 'monto']
+        comm_keys = ['comision', 'comisiones', 'commission', 'commissions', 'comm', 'fee', 'fees', 'totalcommission', 'commissionfee', 'comisionmt5', 'comisionmt4', 'comisioncerrar']
+        swap_keys = ['swap', 'swaps', 'rollover', 'swapmt4', 'swapmt5']
+
+        p_key, raw_profit = find_val(profit_keys)
+        c_key, comm_val = find_val(comm_keys)
+        s_key, swap_val = find_val(swap_keys)
+
         net_result = raw_profit - abs(comm_val) + swap_val
-        
+
         op_dict['raw_profit'] = raw_profit
         op_dict['comision_calc'] = abs(comm_val)
         op_dict['swap_calc'] = swap_val
         op_dict['resultado'] = net_result
-        
+        op_dict['comm_column_found'] = c_key if c_key else "NINGUNA"
+
         processed_ops.append(op_dict)
         
     return processed_ops
@@ -246,10 +248,6 @@ def update_op_capturas(op_row, new_capturas_list):
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
 def obtener_df_diario_clasificado(df_input, cuentas_lista):
-    """
-    Agrupa las operaciones por día y cuenta (sesión del aplicativo) y clasifica
-    según el rendimiento % en WIN (> +0.10%), LOSS (< -0.10%) y BE.
-    """
     if df_input.empty:
         return pd.DataFrame()
     
@@ -306,6 +304,23 @@ st.sidebar.markdown("---")
 if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
+
+# -----------------------------------------------------------------------------
+# HERRAMIENTA DE DIAGNÓSTICO EN TIEMPO REAL (INSPECTOR DE SUPABASE)
+# -----------------------------------------------------------------------------
+with st.sidebar.expander("🛠️ Inspector de Supabase (Diagnóstico)", expanded=False):
+    if ops_raw:
+        sample_op = ops_raw[0]
+        st.caption("Columnas encontradas en `operaciones`:")
+        st.code(list(sample_op.keys()))
+        
+        st.caption("Columna de comisión detectada:")
+        st.info(f"🔑 `{sample_op.get('comm_column_found', 'Ninguna')}` (Valor: `${sample_op.get('comision_calc', 0.0):,.2f}`) ")
+        
+        if st.checkbox("Ver primer registro en JSON crudo"):
+            st.json(sample_op)
+    else:
+        st.warning("No se recibieron datos de la tabla operaciones.")
 
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
@@ -1135,6 +1150,8 @@ with tab_trades:
                         
                         if tot_comm > 0 or tot_swap != 0:
                             st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
+                        else:
+                            st.caption("ℹ️ Sin comisiones/swaps registrados en Supabase para esta sesión.")
                             
                         st.markdown("---")
                         
