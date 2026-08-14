@@ -138,6 +138,13 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] {
         align-items: center !important;
     }
+    
+    /* Ajustes para el Modal de Zoom Flotante Estilo Notion */
+    div[data-testid="stModal"] {
+        background-color: #12151C !important;
+        border: 1px solid #282D3C !important;
+        border-radius: 12px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -186,6 +193,23 @@ def update_op_capturas(op_row, new_capturas_list):
         acc_num = op_row.get("account_number")
         fecha_val = op_row.get("fecha")
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
+
+# MODAL FLOTANTE A PANTALLA COMPLETA ESTILO NOTION
+@st.dialog("🔍 Vista Ampliada de la Captura", width="large")
+def mostrar_modal_zoom(cap):
+    img_src = cap.get("url") or cap.get("base64")
+    if img_src:
+        st.image(img_src, use_container_width=True)
+    
+    col_m1, col_m2 = st.columns([1, 2])
+    with col_m1:
+        st.markdown(f"**Etiqueta:** `{cap.get('tipo', 'Gráfico')}`")
+    with col_m2:
+        nota_txt = cap.get('nota')
+        if nota_txt:
+            st.markdown(f"**Notas técnicas:** {nota_txt}")
+        else:
+            st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
 # 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE DE CUENTAS
@@ -903,8 +927,9 @@ with tab_trades:
                                         
                                         b_col1, b_col2 = st.columns([2, 1])
                                         with b_col1:
+                                            # DISPARA EL MODAL FLOTANTE A PANTALLA COMPLETA
                                             if st.button(f"🔍 Zoom", key=f"zoom_pop_{row_key}_{c_idx}", use_container_width=True):
-                                                st.session_state[f"active_zoom_{row_key}"] = cap
+                                                mostrar_modal_zoom(cap)
                                         with b_col2:
                                             if st.button("🗑️", key=f"del_pop_{row_key}_{c_idx}", help="Eliminar captura", use_container_width=True):
                                                 capturas_list.pop(c_idx)
@@ -917,16 +942,6 @@ with tab_trades:
                                                     st.error(f"Error al eliminar: {ex_del}")
                         else:
                             st.info("No hay capturas adjuntas aún para esta sesión.")
-
-                        zoom_data = st.session_state.get(f"active_zoom_{row_key}")
-                        if zoom_data:
-                            st.markdown("---")
-                            st.markdown("##### 🔍 Detalle Ampliado")
-                            st.image(zoom_data.get("url") or zoom_data.get("base64"), use_container_width=True)
-                            st.caption(f"**Etiqueta:** {zoom_data.get('tipo')} | **Notas:** {zoom_data.get('nota', 'Sin notas')}")
-                            if st.button("❌ Cerrar Zoom", key=f"close_zoom_pop_{row_key}", use_container_width=True):
-                                del st.session_state[f"active_zoom_{row_key}"]
-                                st.rerun()
 
                         # ZONA NATIVA DE SUBIDA DE ARCHIVO
                         st.markdown("---")
