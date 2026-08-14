@@ -263,7 +263,6 @@ if cuentas_raw:
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
             
-            # Mantiene el valor previo si existe en la sesión
             if key not in st.session_state:
                 st.session_state[key] = True
                 
@@ -301,7 +300,6 @@ if cuentas_raw:
                 on_change=cb_master
             )
             
-            # Desplegable contraído por defecto (expanded=False)
             with st.sidebar.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=False):
                 for acc in lista_accs:
                     acc_id = str(acc["account_number"])
@@ -716,15 +714,36 @@ with tab_trades:
     st.subheader("📖 Historial & Analítica de Operaciones")
     st.caption("Filtra y revisa las sesiones por fecha, cuenta y estado.")
     
+    # CALCULAMOS LA SEMANA EN CURSO POR DEFECTO (LUNES A HOY)
+    hoy = datetime.date.today()
+    lunes_semana_actual = hoy - datetime.timedelta(days=hoy.weekday())
+    
+    col_f1, col_f2 = st.columns([2, 2])
+    
+    with col_f1:
+        # date_input libre sin min_value/max_value para habilitar el selector de año libre
+        rango_fechas = st.date_input(
+            "📅 Rango de Fechas:",
+            value=(lunes_semana_actual, hoy),
+            key="filtro_rango_fechas"
+        )
+        
+    with col_f2:
+        filtro_estados = st.multiselect(
+            "🎯 Filtrar Resultado:",
+            options=["WIN", "LOSS", "BE"],
+            default=["WIN", "LOSS", "BE"],
+            key="filtro_multiselect_estados"
+        )
+        
     if df_ops.empty:
-        st.info("No hay operaciones para la selección de cuentas actual.")
+        st.info("No hay operaciones registradas para las cuentas seleccionadas.")
     else:
         map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_raw} if cuentas_raw else {}
         
         df_ops_copy = df_ops.copy()
         df_ops_copy["acc_id_str"] = df_ops_copy["account_number"].astype(str)
         
-        # Garantizar que las columnas existan antes del groupby
         if "capturas" not in df_ops_copy.columns:
             df_ops_copy["capturas"] = None
         if "resultado" not in df_ops_copy.columns:
@@ -732,7 +751,6 @@ with tab_trades:
         if "nombre_cuenta" not in df_ops_copy.columns:
             df_ops_copy["nombre_cuenta"] = "Cuenta"
             
-        # Mapeo de datos para el listado diario
         df_diario = df_ops_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"]).agg({
             "resultado": "sum"
         }).reset_index()
@@ -750,29 +768,13 @@ with tab_trades:
                 
         df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar_resultado)
         
-        col_f1, col_f2 = st.columns([2, 2])
-        
-        min_f = df_diario["fecha_dia"].min()
-        max_f = df_diario["fecha_dia"].max()
-        
-        with col_f1:
-            rango_fechas = st.date_input(
-                "📅 Rango de Fechas:",
-                value=(min_f, max_f),
-                min_value=min_f,
-                max_value=max_f
-            )
-            
-        with col_f2:
-            filtro_estados = st.multiselect(
-                "🎯 Filtrar Resultado:",
-                options=["WIN", "LOSS", "BE"],
-                default=["WIN", "LOSS", "BE"]
-            )
-            
+        # FILTRADO DE FECHAS SEGURO
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
             f_start, f_end = rango_fechas[0], rango_fechas[1]
             df_filtered_tab4 = df_diario[(df_diario["fecha_dia"] >= f_start) & (df_diario["fecha_dia"] <= f_end)]
+        elif isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 1:
+            f_start = rango_fechas[0]
+            df_filtered_tab4 = df_diario[df_diario["fecha_dia"] == f_start]
         else:
             df_filtered_tab4 = df_diario.copy()
             
@@ -784,7 +786,7 @@ with tab_trades:
         st.markdown("<br>", unsafe_allow_html=True)
         
         if df_filtered_tab4.empty:
-            st.info("No hay registros que coincidan con los filtros aplicados.")
+            st.warning("⚠️ No se encontraron operaciones para el rango de fechas seleccionado.")
         else:
             chart_col1, chart_col2 = st.columns([1, 1])
             
@@ -932,7 +934,6 @@ with tab_trades:
                                         
                                         b_col1, b_col2 = st.columns([2, 1])
                                         with b_col1:
-                                            # DISPARA EL MODAL FLOTANTE MAXIMIZADO
                                             if st.button(f"🔍 Zoom", key=f"zoom_pop_{row_key}_{c_idx}", use_container_width=True):
                                                 mostrar_modal_zoom(cap)
                                         with b_col2:
