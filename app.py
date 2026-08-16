@@ -963,7 +963,7 @@ with tab_analytics:
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS (BARRAS DE PROGRESO CON COLORES VERDE Y ROJO)
+# TAB 3: ESTADO DE CUENTAS (BARRAS DE PROGRESO CORREGIDAS)
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -995,7 +995,7 @@ with tab_cuentas:
                         <span style="font-size: 14px; color: #787B86; margin-left: 12px; font-weight: 600;">ID #{acc_num_str}</span>
                     </div>
                     <div>
-                        <span style="background-color: #2962FF; color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-text-transform: uppercase;">{estado_tag}</span>
+                        <span style="background-color: #2962FF; color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1019,14 +1019,15 @@ with tab_cuentas:
                     delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
                     col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
                 
+                # FORMATO DE CADENAS DE TEXTO HTML LIMPIAS
                 if ganancia < 0:
-                    str_ganancia = f":red[-\\${abs(ganancia):,.2f}]"
+                    str_ganancia = f"<span style='color:#EF5350; font-weight:bold;'>-${abs(ganancia):,.2f}</span>"
                 elif ganancia > 0:
-                    str_ganancia = f":green[+\\${ganancia:,.2f}]"
+                    str_ganancia = f"<span style='color:#26A69A; font-weight:bold;'>+${ganancia:,.2f}</span>"
                 else:
-                    str_ganancia = "\\$0.00"
+                    str_ganancia = "$0.00"
                     
-                str_obj = f"\\${c.get('objetivo_profit', 0):,.2f}"
+                str_obj = f"${c.get('objetivo_profit', 0):,.2f}"
                 
                 # 🟢 BARRA DE PROGRESO HACIA EL OBJETIVO EN VERDE (#26A69A)
                 if not es_fondeada:
@@ -1043,11 +1044,11 @@ with tab_cuentas:
                     st.caption("🟢 Cuenta Fondeada activa.")
                 
                 if p_act > 0:
-                    str_p_act = f":red[-\\${p_act:,.2f}]"
+                    str_p_act = f"<span style='color:#EF5350; font-weight:bold;'>-${p_act:,.2f}</span>"
                 else:
-                    str_p_act = f":green[\\$0.00]"
+                    str_p_act = f"<span style='color:#26A69A; font-weight:bold;'>$0.00</span>"
                     
-                str_p_max = f"\\${p_max:,.2f}"
+                str_p_max = f"${p_max:,.2f}"
                 pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
                 pct_d_val = min(max(pct_drawdown * 100, 0.0), 100.0)
                 
