@@ -432,7 +432,6 @@ def render_seccion_cuentas(prefix, grupos_dict):
                 key=master_key,
                 on_change=cb_master
             )
-            # DESPLEGABLE CONTRAÍBLE PARA GRUPOS DE VARIAS SUBCUENTAS
             with st.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=False):
                 for acc in lista_accs:
                     acc_id = str(acc["account_number"])
@@ -573,7 +572,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO DE RESULTADOS (CON TOOLTIP / FLOATING HOVER CARD)
+# TAB 1: CALENDARIO DE RESULTADOS (TOOLTIP CON NÚMERO DE OPS A LA IZQUIERDA)
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -595,7 +594,6 @@ with tab_calendar:
                 w_cnt = len(group[group['win_loss'] == 'WIN'])
                 wr_val = (w_cnt / tr_cnt * 100) if tr_cnt > 0 else 0
                 
-                # Desglose detallado por cuenta para la ventana flotante (hover)
                 acc_breakdown = []
                 for acc_num, acc_group in group.groupby('account_number'):
                     acc_pnl = acc_group['resultado'].sum()
@@ -645,7 +643,7 @@ with tab_calendar:
         .green-meta { color: #4ADE80 !important; font-weight: 700; }
         .red-meta { color: #EF5350 !important; font-weight: 700; }
 
-        /* ESTILOS DE LA VENTANA FLOTANTE EN HOVER (TOOLTIP) */
+        /* ESTILOS DE LA VENTANA FLOTANTE EN HOVER */
         .day-tooltip {
             visibility: hidden;
             opacity: 0;
@@ -657,7 +655,7 @@ with tab_calendar:
             border: 1px solid #2962FF;
             border-radius: 8px;
             padding: 10px 12px;
-            width: 220px;
+            width: 230px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.7);
             z-index: 9999;
             transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -670,7 +668,7 @@ with tab_calendar:
         }
         .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
-        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
         .tooltip-acc-val { font-weight: 800; font-size: 11px; }
     </style>
     """
@@ -722,7 +720,7 @@ with tab_calendar:
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
                     
-                    # Generar HTML de la ventana flotante de hover
+                    # NÚMERO DE OPERACIONES A LA IZQUIERDA DEL NOMBRE
                     tooltip_html = "<div class='day-tooltip'>"
                     tooltip_html += f"<div class='tooltip-title'>📊 {fecha_obj.strftime('%d %b %Y')}</div>"
                     for acc_info in st_day.get('accounts', []):
@@ -733,7 +731,7 @@ with tab_calendar:
                         sign_str = "+" if pnl_acc > 0 else ""
                         tooltip_html += f"""
                         <div class='tooltip-row'>
-                            <span class='tooltip-acc-name'>{acc_n} <span style='color:#787B86;'>({tr_acc} ops)</span></span>
+                            <span class='tooltip-acc-name'><span style='color:#787B86; font-weight:700;'>({tr_acc} ops)</span> {acc_n}</span>
                             <span class='tooltip-acc-val {pnl_cls}'>{sign_str}${pnl_acc:,.2f}</span>
                         </div>
                         """
@@ -949,7 +947,7 @@ with tab_analytics:
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS (ENCABEZADOS DESTACADOS & RETIROS SPLIT 80%)
+# TAB 3: ESTADO DE CUENTAS
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -974,7 +972,6 @@ with tab_cuentas:
             
             with st.expander(f"🔹 {c['nombre_cuenta'].upper()} | ID #{acc_num_str} — [{estado_tag.upper()}]", expanded=True):
                 
-                # ENCABEZADO DESTACADO Y FÁCIL DE IDENTIFICAR
                 st.markdown(f"""
                 <div style="background-color: #12151C; padding: 12px 16px; border-radius: 8px; border: 1px solid #282D3C; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
                     <div>
