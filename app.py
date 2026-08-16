@@ -175,7 +175,6 @@ def process_raw_operations(ops_list):
     for op in ops_list:
         op_dict = dict(op)
         
-        # Ignorar cálculos de comisión si es una transacción de Retiro
         tipo_op = str(op_dict.get('tipo', '')).upper()
         if tipo_op == "WITHDRAWAL":
             op_dict['raw_profit'] = float(op_dict.get('resultado', 0.0) or 0.0)
@@ -263,7 +262,6 @@ def update_op_capturas(op_row, new_capturas_list):
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
 def obtener_df_diario_clasificado(df_input, cuentas_lista):
-    # Filtrar retiros para que no afecten la estadística de trading diario
     if df_input.empty:
         return pd.DataFrame()
     
@@ -434,17 +432,19 @@ def render_seccion_cuentas(prefix, grupos_dict):
                 key=master_key,
                 on_change=cb_master
             )
-            for acc in lista_accs:
-                acc_id = str(acc["account_number"])
-                cid_key = f"chk_{acc_id}"
-                child_label = f"↳ #{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
-                if st.checkbox(
-                    child_label,
-                    value=st.session_state.get(cid_key, False),
-                    key=cid_key,
-                    on_change=cb_child
-                ):
-                    cuentas_seleccionadas_ids.append(acc_id)
+            # DESPLEGABLE CONTRAÍBLE PARA GRUPOS DE VARIAS SUBCUENTAS
+            with st.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=False):
+                for acc in lista_accs:
+                    acc_id = str(acc["account_number"])
+                    cid_key = f"chk_{acc_id}"
+                    child_label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
+                    if st.checkbox(
+                        child_label,
+                        value=st.session_state.get(cid_key, False),
+                        key=cid_key,
+                        on_change=cb_child
+                    ):
+                        cuentas_seleccionadas_ids.append(acc_id)
 
 with st.sidebar.expander("🟢 Funded", expanded=True):
     if not cuentas_funded:
@@ -479,7 +479,6 @@ if not df_ops.empty:
     else:
         df_ops = pd.DataFrame()
 
-# Excluir los retiros de los gráficos de trading
 df_ops_trading = df_ops[df_ops.get("tipo", "").astype(str).str.upper() != "WITHDRAWAL"].copy() if not df_ops.empty else pd.DataFrame()
 
 # -----------------------------------------------------------------------------
@@ -574,7 +573,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO DE RESULTADOS
+# TAB 1: CALENDARIO DE RESULTADOS (CON TOOLTIP / FLOATING HOVER CARD)
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -595,10 +594,25 @@ with tab_calendar:
                 tr_cnt = len(group)
                 w_cnt = len(group[group['win_loss'] == 'WIN'])
                 wr_val = (w_cnt / tr_cnt * 100) if tr_cnt > 0 else 0
+                
+                # Desglose detallado por cuenta para la ventana flotante (hover)
+                acc_breakdown = []
+                for acc_num, acc_group in group.groupby('account_number'):
+                    acc_pnl = acc_group['resultado'].sum()
+                    acc_tr = len(acc_group)
+                    acc_name = acc_group['nombre_cuenta'].iloc[0] if 'nombre_cuenta' in acc_group.columns else str(acc_num)
+                    acc_breakdown.append({
+                        'name': acc_name,
+                        'account_number': acc_num,
+                        'pnl': acc_pnl,
+                        'trades': acc_tr
+                    })
+
                 daily_stats[f_dia] = {
                     'pnl': pnl,
                     'trades': tr_cnt,
-                    'win_rate': wr_val
+                    'win_rate': wr_val,
+                    'accounts': acc_breakdown
                 }
 
     cal_obj = calendar.Calendar(firstweekday=6)
@@ -607,8 +621,8 @@ with tab_calendar:
     css_cal = """
     <style>
         body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .tradelio-cal-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 10px; }
-        .tradelio-grid { display: grid; grid-template-columns: 130px repeat(7, 1fr); gap: 8px; }
+        .tradelio-cal-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 35px 10px 10px 10px; overflow: visible !important; }
+        .tradelio-grid { display: grid; grid-template-columns: 130px repeat(7, 1fr); gap: 8px; overflow: visible !important; }
         .tradelio-header { text-align: center; font-weight: 700; font-size: 11px; color: #787B86; text-transform: uppercase; padding-bottom: 4px; }
         .week-summary-card { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
         .week-title { font-size: 11px; color: #A3A6AF; font-weight: 600; }
@@ -618,18 +632,11 @@ with tab_calendar:
         .week-pct.neutral { color: #787B86; }
         .week-val { font-size: 17px; font-weight: 800; margin-top: 4px; color: #FFFFFF; }
         
-        .day-box { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
-        .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; }
+        .day-box { position: relative; background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; cursor: pointer; }
+        .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; cursor: default; }
         
-        .day-box.win-day { 
-            background-color: #11321E !important; 
-            border: 1px solid #1F5938 !important; 
-        }
-        
-        .day-box.loss-day { 
-            background-color: #3C1C21 !important; 
-            border: 1px solid #63272F !important; 
-        }
+        .day-box.win-day { background-color: #11321E !important; border: 1px solid #1F5938 !important; }
+        .day-box.loss-day { background-color: #3C1C21 !important; border: 1px solid #63272F !important; }
         
         .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
         .day-content { text-align: right; }
@@ -637,6 +644,34 @@ with tab_calendar:
         .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
         .green-meta { color: #4ADE80 !important; font-weight: 700; }
         .red-meta { color: #EF5350 !important; font-weight: 700; }
+
+        /* ESTILOS DE LA VENTANA FLOTANTE EN HOVER (TOOLTIP) */
+        .day-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 105%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1A1E29;
+            border: 1px solid #2962FF;
+            border-radius: 8px;
+            padding: 10px 12px;
+            width: 220px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+            z-index: 9999;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            pointer-events: none;
+            text-align: left;
+        }
+        .day-box:hover .day-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
+        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+        .tooltip-acc-val { font-weight: 800; font-size: 11px; }
     </style>
     """
     
@@ -686,14 +721,31 @@ with tab_calendar:
                         box_cls = ""
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
+                    
+                    # Generar HTML de la ventana flotante de hover
+                    tooltip_html = "<div class='day-tooltip'>"
+                    tooltip_html += f"<div class='tooltip-title'>📊 {fecha_obj.strftime('%d %b %Y')}</div>"
+                    for acc_info in st_day.get('accounts', []):
+                        pnl_acc = acc_info['pnl']
+                        tr_acc = acc_info['trades']
+                        acc_n = acc_info['name']
+                        pnl_cls = "green-meta" if pnl_acc >= 0 else "red-meta"
+                        sign_str = "+" if pnl_acc > 0 else ""
+                        tooltip_html += f"""
+                        <div class='tooltip-row'>
+                            <span class='tooltip-acc-name'>{acc_n} <span style='color:#787B86;'>({tr_acc} ops)</span></span>
+                            <span class='tooltip-acc-val {pnl_cls}'>{sign_str}${pnl_acc:,.2f}</span>
+                        </div>
+                        """
+                    tooltip_html += "</div>"
                         
-                    html_grid += f"<div class='day-box {box_cls}'><div class='day-num'>{day}</div><div class='day-content'><div class='day-pnl'>{pnl_fmt}</div><div class='day-meta'>{meta_str}</div></div></div>"
+                    html_grid += f"<div class='day-box {box_cls}'>{tooltip_html}<div class='day-num'>{day}</div><div class='day-content'><div class='day-pnl'>{pnl_fmt}</div><div class='day-meta'>{meta_str}</div></div></div>"
                 else:
                     html_grid += f"<div class='day-box'><div class='day-num'>{day}</div></div>"
                     
     html_grid += "</div></div>"
     
-    st.components.v1.html(html_grid, height=620, scrolling=True)
+    st.components.v1.html(html_grid, height=640, scrolling=True)
     
     mc1, mc2, mc3 = st.columns(3)
     mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}")
@@ -897,7 +949,7 @@ with tab_analytics:
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS (INCLUYE PANEL DE RETIROS CON SPLIT 80%)
+# TAB 3: ESTADO DE CUENTAS (ENCABEZADOS DESTACADOS & RETIROS SPLIT 80%)
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -920,7 +972,21 @@ with tab_cuentas:
             estado_tag = str(c.get("estado", "Fase 1"))
             es_fondeada = ("fondeada" in estado_tag.lower() or "funded" in estado_tag.lower())
             
-            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{acc_num_str}] — [{estado_tag}]", expanded=True):
+            with st.expander(f"🔹 {c['nombre_cuenta'].upper()} | ID #{acc_num_str} — [{estado_tag.upper()}]", expanded=True):
+                
+                # ENCABEZADO DESTACADO Y FÁCIL DE IDENTIFICAR
+                st.markdown(f"""
+                <div style="background-color: #12151C; padding: 12px 16px; border-radius: 8px; border: 1px solid #282D3C; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 22px; font-weight: 800; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">{c['nombre_cuenta']}</span>
+                        <span style="font-size: 14px; color: #787B86; margin-left: 12px; font-weight: 600;">ID #{acc_num_str}</span>
+                    </div>
+                    <div>
+                        <span style="background-color: #2962FF; color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
                 col_c1, col_c2, col_c3 = st.columns(3)
                 
                 delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
@@ -968,9 +1034,6 @@ with tab_cuentas:
                 txt_d = f"{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})"
                 st.progress(pct_drawdown, text=txt_d)
 
-                # =============================================================
-                # PANEL EXCLUSIVO PARA CUENTAS FONDEADAS: RETIROS Y SPLIT 80%
-                # =============================================================
                 if es_fondeada:
                     st.markdown("<br>", unsafe_allow_html=True)
                     with st.expander("💸 Historial de Retiros & Profit Split (80%)", expanded=False):
