@@ -127,12 +127,26 @@ st.markdown("""
         align-items: center !important;
     }
     
+    /* MODAL Y SOPORTE DE GESTOS TÁCTILES (PELLIZCO / ZOOM MÓVIL) */
+    img {
+        touch-action: pan-x pan-y pinch-zoom !important;
+        max-width: 100% !important;
+        object-fit: contain !important;
+        -webkit-user-select: auto !important;
+        user-select: auto !important;
+    }
+    div[data-testid="stDialog"] img, div[data-testid="stPopover"] img {
+        touch-action: pan-x pan-y pinch-zoom !important;
+        cursor: zoom-in;
+    }
     div[data-testid="stDialog"] > div {
         max-width: 92vw !important;
         width: 92vw !important;
         background-color: #12151C !important;
         border: 1px solid #282D3C !important;
         border-radius: 12px !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -297,7 +311,11 @@ def obtener_df_diario_clasificado(df_input, cuentas_lista):
 def mostrar_modal_zoom(cap):
     img_src = cap.get("url") or cap.get("base64")
     if img_src:
-        st.image(img_src, use_container_width=True)
+        st.markdown(f"""
+        <div style="width:100%; overflow:auto; text-align:center; -webkit-overflow-scrolling:touch;">
+            <img src="{img_src}" style="max-width:100%; height:auto; touch-action: pan-x pan-y pinch-zoom !important; border-radius:8px;" />
+        </div>
+        """, unsafe_allow_html=True)
     
     col_m1, col_m2 = st.columns([1, 2])
     with col_m1:
@@ -572,7 +590,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO DE RESULTADOS (TOOLTIP CON NÚMERO DE OPS A LA IZQUIERDA)
+# TAB 1: CALENDARIO DE RESULTADOS
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
@@ -643,7 +661,6 @@ with tab_calendar:
         .green-meta { color: #4ADE80 !important; font-weight: 700; }
         .red-meta { color: #EF5350 !important; font-weight: 700; }
 
-        /* ESTILOS DE LA VENTANA FLOTANTE EN HOVER */
         .day-tooltip {
             visibility: hidden;
             opacity: 0;
@@ -720,7 +737,6 @@ with tab_calendar:
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
                     
-                    # NÚMERO DE OPERACIONES A LA IZQUIERDA DEL NOMBRE
                     tooltip_html = "<div class='day-tooltip'>"
                     tooltip_html += f"<div class='tooltip-title'>📊 {fecha_obj.strftime('%d %b %Y')}</div>"
                     for acc_info in st_day.get('accounts', []):
@@ -947,7 +963,7 @@ with tab_analytics:
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS
+# TAB 3: ESTADO DE CUENTAS (BARRAS DE PROGRESO CON COLORES VERDE Y ROJO)
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -979,7 +995,7 @@ with tab_cuentas:
                         <span style="font-size: 14px; color: #787B86; margin-left: 12px; font-weight: 600;">ID #{acc_num_str}</span>
                     </div>
                     <div>
-                        <span style="background-color: #2962FF; color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
+                        <span style="background-color: #2962FF; color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-text-transform: uppercase;">{estado_tag}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1012,11 +1028,17 @@ with tab_cuentas:
                     
                 str_obj = f"\\${c.get('objetivo_profit', 0):,.2f}"
                 
+                # 🟢 BARRA DE PROGRESO HACIA EL OBJETIVO EN VERDE (#26A69A)
                 if not es_fondeada:
                     obj = float(c.get("objetivo_profit", 0.0))
+                    pct_p_val = min(max(pct_prog * 100, 0.0), 100.0)
                     st.write("**Progreso hacia el Objetivo (Phase Pass):**")
-                    txt_p = f"{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})"
-                    st.progress(pct_prog, text=txt_p)
+                    st.markdown(f"""
+                    <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
+                        <div style="background-color: #26A69A; width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                    </div>
+                    <div style="font-size: 12px; color: #A3A6AF; margin-top: 4px; margin-bottom: 12px;">{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})</div>
+                    """, unsafe_allow_html=True)
                 else:
                     st.caption("🟢 Cuenta Fondeada activa.")
                 
@@ -1027,9 +1049,16 @@ with tab_cuentas:
                     
                 str_p_max = f"\\${p_max:,.2f}"
                 pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
+                pct_d_val = min(max(pct_drawdown * 100, 0.0), 100.0)
+                
+                # 🔴 BARRA DE PROGRESO DE PÉRDIDA MÁXIMA EN ROJO (#EF5350)
                 st.write("**Límite de Pérdida Máxima Consumido:**")
-                txt_d = f"{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})"
-                st.progress(pct_drawdown, text=txt_d)
+                st.markdown(f"""
+                <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
+                    <div style="background-color: #EF5350; width: {pct_d_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                </div>
+                <div style="font-size: 12px; color: #A3A6AF; margin-top: 4px;">{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})</div>
+                """, unsafe_allow_html=True)
 
                 if es_fondeada:
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1272,7 +1301,11 @@ with tab_trades:
                                     st.markdown(f"**Captura {c_idx+1}: {cap.get('tipo', 'Gráfico')}**")
                                     img_src = cap.get("url") or cap.get("base64")
                                     if img_src:
-                                        st.image(img_src, use_container_width=True)
+                                        st.markdown(f"""
+                                        <div style="width:100%; overflow:auto; text-align:center; -webkit-overflow-scrolling:touch;">
+                                            <img src="{img_src}" style="max-width:100%; height:auto; touch-action: pan-x pan-y pinch-zoom !important; border-radius:6px; margin-bottom:8px;" />
+                                        </div>
+                                        """, unsafe_allow_html=True)
                                         
                                         b_col1, b_col2 = st.columns([2, 1])
                                         with b_col1:
