@@ -19,20 +19,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS avanzados estilo Notion Dark Mode
 st.markdown("""
 <style>
     :root {
         --primary-color: #2962FF !important;
     }
 
-    /* Fondo principal de la app */
     .stApp {
         background-color: #12151C;
         color: #E0E3EB;
     }
     
-    /* Pestañas (Tabs) */
     button[data-baseweb="tab"] {
         color: #787B86 !important;
         font-weight: 600 !important;
@@ -47,7 +44,6 @@ st.markdown("""
         background-color: #282D3C !important;
     }
     
-    /* Checkboxes */
     div[data-baseweb="checkbox"] {
         margin-bottom: 4px;
         padding: 2px 4px;
@@ -71,12 +67,10 @@ st.markdown("""
         font-weight: 500 !important;
     }
     
-    /* Estilos del desplegable de subcuentas en la barra lateral */
     .stSidebar div[data-testid="stExpander"] {
-        border: none !important;
-        background-color: transparent !important;
-        box-shadow: none !important;
-        margin-top: -6px !important;
+        border: 1px solid #282D3C !important;
+        background-color: #1A1E29 !important;
+        border-radius: 8px !important;
         margin-bottom: 8px !important;
     }
     .stSidebar div[data-testid="stExpander"] details {
@@ -86,19 +80,15 @@ st.markdown("""
     .stSidebar div[data-testid="stExpander"] summary {
         background-color: transparent !important;
         border: none !important;
-        padding: 2px 6px !important;
-        color: #787B86 !important;
-        font-size: 12px !important;
+        padding: 6px 10px !important;
+        color: #E0E3EB !important;
+        font-size: 13px !important;
+        font-weight: 700 !important;
     }
     .stSidebar div[data-testid="stExpander"] summary:hover {
         color: #2962FF !important;
     }
-    .stSidebar div[data-testid="stExpander"] div[data-testid="stStyleContainer"],
-    .stSidebar div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
-        padding-left: 14px !important;
-    }
 
-    /* Botones */
     .stButton > button {
         border-radius: 8px !important;
         border: 1px solid #282D3C !important;
@@ -110,7 +100,6 @@ st.markdown("""
         color: #2962FF !important;
     }
     
-    /* Tarjetas KPI */
     .metric-card {
         background-color: #1A1E29;
         border: 1px solid #282D3C;
@@ -134,12 +123,10 @@ st.markdown("""
     .red-text { color: #EF5350; font-weight: 700; }
     .blue-text { color: #2962FF; }
 
-    /* Estilos para Alineación de Filas */
     div[data-testid="stHorizontalBlock"] {
         align-items: center !important;
     }
     
-    /* Modal de Zoom Súper Grande Estilo Lightbox Notion */
     div[data-testid="stDialog"] > div {
         max-width: 92vw !important;
         width: 92vw !important;
@@ -167,28 +154,20 @@ except Exception as e:
     st.stop()
 
 def obtener_tarifa_por_lote(nombre_cuenta):
-    """
-    Retorna el costo de comisión por lote completo según la empresa de fondeo.
-    """
     n_lower = str(nombre_cuenta).lower().strip()
     if "wall street" in n_lower:
-        return 3.0  # $0.90 por 0.30 lotes = $3.00/lote
+        return 3.0
     elif "funding pips" in n_lower:
-        return 5.0  # $1.75 por 0.35 lotes = $5.00/lote
+        return 5.0
     elif "fiver" in n_lower:
-        return 4.0  # $4.00 por 1.00 lote
+        return 4.0
     elif "funded next" in n_lower or "fundednext" in n_lower:
-        return 5.0  # $5.00 por 1.00 lote
+        return 5.0
     elif "orion" in n_lower:
-        return 4.0  # Standard ($2.16/0.54) y Nova ($16/4.00) = $4.00/lote
-    return 4.0      # Valor general por defecto si no coincide el nombre
+        return 4.0
+    return 4.0
 
 def process_raw_operations(ops_list):
-    """
-    Procesa las operaciones recuperadas de Supabase.
-    Si la comisión enviada es $0.00 pero existe volumen registrable, aplica la tarifa por lote.
-    Resultado Neto = Ganancia Bruta - |Comisión| + Swap
-    """
     if not ops_list:
         return []
     
@@ -196,6 +175,16 @@ def process_raw_operations(ops_list):
     for op in ops_list:
         op_dict = dict(op)
         
+        # Ignorar cálculos de comisión si es una transacción de Retiro
+        tipo_op = str(op_dict.get('tipo', '')).upper()
+        if tipo_op == "WITHDRAWAL":
+            op_dict['raw_profit'] = float(op_dict.get('resultado', 0.0) or 0.0)
+            op_dict['comision_calc'] = 0.0
+            op_dict['swap_calc'] = 0.0
+            op_dict['resultado'] = float(op_dict.get('resultado', 0.0) or 0.0)
+            processed_ops.append(op_dict)
+            continue
+
         def find_val(candidates):
             for k, v in op_dict.items():
                 clean_k = str(k).strip().lower().replace("_", "").replace("-", "").replace(" ", "")
@@ -222,7 +211,6 @@ def process_raw_operations(ops_list):
 
         nombre_cta = op_dict.get('nombre_cuenta', '')
         
-        # Si no hay comisión registrada explícita pero hay volumen/lotes disponibles
         if abs(comm_val) == 0.0 and vol_val > 0.0:
             tarifa = obtener_tarifa_por_lote(nombre_cta)
             comm_val = vol_val * tarifa
@@ -275,17 +263,21 @@ def update_op_capturas(op_row, new_capturas_list):
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
 def obtener_df_diario_clasificado(df_input, cuentas_lista):
+    # Filtrar retiros para que no afecten la estadística de trading diario
     if df_input.empty:
         return pd.DataFrame()
     
-    map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_lista} if cuentas_lista else {}
-    df_copy = df_input.copy()
-    df_copy["acc_id_str"] = df_copy["account_number"].astype(str)
+    df_trading = df_input[df_input.get("tipo", "").astype(str).str.upper() != "WITHDRAWAL"].copy()
+    if df_trading.empty:
+        return pd.DataFrame()
     
-    if "nombre_cuenta" not in df_copy.columns:
-        df_copy["nombre_cuenta"] = "Cuenta"
+    map_bal_inicial = {str(c["account_number"]): float(c["balance_inicial"]) for c in cuentas_lista} if cuentas_lista else {}
+    df_trading["acc_id_str"] = df_trading["account_number"].astype(str)
+    
+    if "nombre_cuenta" not in df_trading.columns:
+        df_trading["nombre_cuenta"] = "Cuenta"
         
-    df_diario = df_copy.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"]).agg({
+    df_diario = df_trading.groupby(["fecha_dia", "acc_id_str", "nombre_cuenta"]).agg({
         "resultado": "sum"
     }).reset_index()
     
@@ -303,7 +295,6 @@ def obtener_df_diario_clasificado(df_input, cuentas_lista):
     df_diario["clasificacion"] = df_diario["pct_rendimiento"].apply(clasificar)
     return df_diario
 
-# MODAL FLOTANTE MAXIMIZADO A CASI PANTALLA COMPLETA
 @st.dialog("🔍 Vista Ampliada de la Captura", width="large")
 def mostrar_modal_zoom(cap):
     img_src = cap.get("url") or cap.get("base64")
@@ -321,7 +312,7 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / AGRUPACIÓN INTELIGENTE Y INSPECTOR
+# 3. BARRA LATERAL / ORGANIZACIÓN: FUNDED -> CHALLENGES -> BREACHED
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -332,82 +323,89 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
-# -----------------------------------------------------------------------------
-# HERRAMIENTA DE DIAGNÓSTICO EN TIEMPO REAL
-# -----------------------------------------------------------------------------
-with st.sidebar.expander("🛠️ Inspector de Datos Supabase", expanded=False):
-    if ops_raw:
-        sample_op = ops_raw[0]
-        st.caption("Columnas en tu tabla `operaciones`:")
-        st.code(list(sample_op.keys()))
-        
-        comm_col_detected = sample_op.get('comm_column_found', 'Ninguna')
-        comm_val_detected = sample_op.get('comision_calc', 0.0)
-        
-        st.markdown(f"• Columna comisión: `{comm_col_detected}`")
-        st.markdown(f"• Comisión calculada/leída: `${comm_val_detected:,.2f}`")
-        
-        if comm_val_detected == 0.0:
-            st.info("ℹ️ Sin comisiones registradas en la muestra.")
-        else:
-            st.success(f"✅ Comisiones integradas correctamente.")
-    else:
-        st.warning("No se recibieron operaciones de Supabase.")
-
 st.sidebar.markdown("### 🔍 Selección de Cuentas")
 
-grupos_cuentas = {}
+cuentas_funded = []
+cuentas_challenges = []
+cuentas_breached = []
+
 if cuentas_raw:
     for c in cuentas_raw:
-        nombre = c["nombre_cuenta"]
-        if nombre not in grupos_cuentas:
-            grupos_cuentas[nombre] = []
-        grupos_cuentas[nombre].append(c)
+        est = str(c.get("estado", "")).strip().lower()
+        if "fondeada" in est or "funded" in est:
+            cuentas_funded.append(c)
+        elif "breached" in est or "quemada" in est or "eliminada" in est:
+            cuentas_breached.append(c)
+        else:
+            cuentas_challenges.append(c)
 
-# INICIALIZACIÓN DE ESTADO: SOLO DESMARCA LAS CUENTAS "NOVA"
+def agrupar_por_nombre(lista_cuentas):
+    grupos = {}
+    for c in lista_cuentas:
+        n = c.get("nombre_cuenta", "Cuenta")
+        if n not in grupos:
+            grupos[n] = []
+        grupos[n].append(c)
+    return grupos
+
 if "init_accounts_state" not in st.session_state:
     st.session_state["init_accounts_state"] = True
     if cuentas_raw:
         for c in cuentas_raw:
             acc_id = str(c["account_number"])
             nombre_c = str(c.get("nombre_cuenta", "")).lower()
+            est_c = str(c.get("estado", "")).lower()
             key_c = f"chk_{acc_id}"
             
-            if "nova" in nombre_c:
+            if "breached" in est_c or "quemada" in est_c or "nova" in nombre_c:
                 st.session_state[key_c] = False
             else:
                 st.session_state[key_c] = True
 
-        for grp_n, acc_list in grupos_cuentas.items():
-            master_key = f"master_{grp_n}"
-            child_ids = [str(a["account_number"]) for a in acc_list]
-            st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
+        for prefix, lista_cat in [("funded", cuentas_funded), ("challenges", cuentas_challenges), ("breached", cuentas_breached)]:
+            for grp_n, acc_list in agrupar_por_nombre(lista_cat).items():
+                child_ids = [str(a["account_number"]) for a in acc_list]
+                st.session_state[f"master_{prefix}_{grp_n}"] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
 
 col_b1, col_b2 = st.sidebar.columns(2)
 if col_b1.button("Todas", use_container_width=True):
     if cuentas_raw:
-        for c in cuentas_raw:
-            st.session_state[f"chk_{c['account_number']}"] = True
-        for grp_n in grupos_cuentas.keys():
-            st.session_state[f"master_{grp_n}"] = True
+        for c in cuentas_funded + cuentas_challenges:
+            acc_id = str(c["account_number"])
+            st.session_state[f"chk_{acc_id}"] = True
+        for c in cuentas_breached:
+            acc_id = str(c["account_number"])
+            st.session_state[f"chk_{acc_id}"] = False
+
+        for grp_n in agrupar_por_nombre(cuentas_funded).keys():
+            st.session_state[f"master_funded_{grp_n}"] = True
+        for grp_n in agrupar_por_nombre(cuentas_challenges).keys():
+            st.session_state[f"master_challenges_{grp_n}"] = True
+        for grp_n in agrupar_por_nombre(cuentas_breached).keys():
+            st.session_state[f"master_breached_{grp_n}"] = False
         st.rerun()
 
 if col_b2.button("Ninguna", use_container_width=True):
     if cuentas_raw:
         for c in cuentas_raw:
-            st.session_state[f"chk_{c['account_number']}"] = False
-        for grp_n in grupos_cuentas.keys():
-            st.session_state[f"master_{grp_n}"] = False
+            acc_id = str(c["account_number"])
+            st.session_state[f"chk_{acc_id}"] = False
+        for prefix in ["funded", "challenges", "breached"]:
+            for grp_n in agrupar_por_nombre(eval(f"cuentas_{prefix}")).keys():
+                st.session_state[f"master_{prefix}_{grp_n}"] = False
         st.rerun()
 
 st.sidebar.markdown("<br>", unsafe_allow_html=True)
 
 cuentas_seleccionadas_ids = []
 
-if cuentas_raw:
-    for nombre_grp, lista_accs in grupos_cuentas.items():
+def render_seccion_cuentas(prefix, grupos_dict):
+    for nombre_grp, lista_accs in grupos_dict.items():
         child_ids = [str(a["account_number"]) for a in lista_accs]
-        master_key = f"master_{nombre_grp}"
+        master_key = f"master_{prefix}_{nombre_grp}"
+
+        if master_key not in st.session_state:
+            st.session_state[master_key] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
 
         def make_callbacks(grp_k=master_key, c_ids=child_ids):
             def on_m_change():
@@ -424,37 +422,47 @@ if cuentas_raw:
             acc = lista_accs[0]
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
-            
             label = f"{acc['nombre_cuenta']} — ${acc['balance']:,.2f}"
-            if st.sidebar.checkbox(label, value=st.session_state.get(key, True), key=key):
+            if st.checkbox(label, value=st.session_state.get(key, True), key=key, on_change=cb_child):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
-            tot_bal_grp = sum([a["balance"] for a in lista_accs])
-            master_label = f"{nombre_grp} ({len(lista_accs)} ctas) — ${tot_bal_grp:,.2f}"
-            
-            st.sidebar.checkbox(
-                master_label, 
-                value=st.session_state.get(master_key, False), 
-                key=master_key, 
+            tot_bal = sum(a["balance"] for a in lista_accs)
+            master_label = f"**{nombre_grp}** ({len(lista_accs)} ctas) — ${tot_bal:,.2f}"
+            st.checkbox(
+                master_label,
+                value=st.session_state.get(master_key, False),
+                key=master_key,
                 on_change=cb_master
             )
-            
-            with st.sidebar.expander(f"🔍 Ver {len(lista_accs)} sub-cuentas", expanded=False):
-                for acc in lista_accs:
-                    acc_id = str(acc["account_number"])
-                    cid_key = f"chk_{acc_id}"
-                    
-                    child_label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
-                    if st.checkbox(
-                        child_label, 
-                        value=st.session_state.get(cid_key, False), 
-                        key=cid_key, 
-                        on_change=cb_child
-                    ):
-                        cuentas_seleccionadas_ids.append(acc_id)
+            for acc in lista_accs:
+                acc_id = str(acc["account_number"])
+                cid_key = f"chk_{acc_id}"
+                child_label = f"↳ #{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
+                if st.checkbox(
+                    child_label,
+                    value=st.session_state.get(cid_key, False),
+                    key=cid_key,
+                    on_change=cb_child
+                ):
+                    cuentas_seleccionadas_ids.append(acc_id)
 
-else:
-    st.sidebar.info("Cargando cuentas...")
+with st.sidebar.expander("🟢 Funded", expanded=True):
+    if not cuentas_funded:
+        st.caption("Sin cuentas fondeadas.")
+    else:
+        render_seccion_cuentas("funded", agrupar_por_nombre(cuentas_funded))
+
+with st.sidebar.expander("🎯 Challenges", expanded=True):
+    if not cuentas_challenges:
+        st.caption("Sin cuentas challenge.")
+    else:
+        render_seccion_cuentas("challenges", agrupar_por_nombre(cuentas_challenges))
+
+with st.sidebar.expander("🔻 Breached", expanded=False):
+    if not cuentas_breached:
+        st.caption("Sin cuentas breached.")
+    else:
+        render_seccion_cuentas("breached", agrupar_por_nombre(cuentas_breached))
 
 if cuentas_seleccionadas_ids:
     cuentas = [c for c in cuentas_raw if str(c["account_number"]) in cuentas_seleccionadas_ids]
@@ -471,6 +479,9 @@ if not df_ops.empty:
     else:
         df_ops = pd.DataFrame()
 
+# Excluir los retiros de los gráficos de trading
+df_ops_trading = df_ops[df_ops.get("tipo", "").astype(str).str.upper() != "WITHDRAWAL"].copy() if not df_ops.empty else pd.DataFrame()
+
 # -----------------------------------------------------------------------------
 # 4. ENCABEZADO Y KPI CARDS
 # -----------------------------------------------------------------------------
@@ -482,8 +493,7 @@ tot_actual = sum([c["balance"] for c in cuentas]) if cuentas else 0
 tot_ganado = tot_actual - tot_inicial
 pct_global = (tot_ganado / tot_inicial * 100) if tot_inicial > 0 else 0
 
-# Obtener historial clasificado por aplicativo
-df_diario_kpi = obtener_df_diario_clasificado(df_ops, cuentas_raw)
+df_diario_kpi = obtener_df_diario_clasificado(df_ops_trading, cuentas_raw)
 
 if not df_diario_kpi.empty:
     wins = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'WIN'])
@@ -494,12 +504,12 @@ if not df_diario_kpi.empty:
 else:
     wins, losses, be_cnt, total_dias_operados, win_rate = 0, 0, 0, 0, 0
 
-gross_profit = df_ops[df_ops['resultado'] > 0]['resultado'].sum() if not df_ops.empty else 0
-gross_loss = abs(df_ops[df_ops['resultado'] < 0]['resultado'].sum()) if not df_ops.empty else 0
+gross_profit = df_ops_trading[df_ops_trading['resultado'] > 0]['resultado'].sum() if not df_ops_trading.empty else 0
+gross_loss = abs(df_ops_trading[df_ops_trading['resultado'] < 0]['resultado'].sum()) if not df_ops_trading.empty else 0
 profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
 
-avg_win = df_ops[df_ops['resultado'] > 0]['resultado'].mean() if wins > 0 else 0
-avg_loss = abs(df_ops[df_ops['resultado'] < 0]['resultado'].mean()) if losses > 0 else 0
+avg_win = df_ops_trading[df_ops_trading['resultado'] > 0]['resultado'].mean() if wins > 0 else 0
+avg_loss = abs(df_ops_trading[df_ops_trading['resultado'] < 0]['resultado'].mean()) if losses > 0 else 0
 risk_reward = (avg_win / avg_loss) if avg_loss > 0 else 0
 
 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
@@ -577,8 +587,8 @@ with tab_calendar:
         ano_sel = st.number_input("Año:", min_value=2024, max_value=2030, value=now.year)
         
     daily_stats = {}
-    if not df_ops.empty:
-        df_mes = df_ops[(df_ops['fecha_dt'].dt.month == mes_sel) & (df_ops['fecha_dt'].dt.year == ano_sel)]
+    if not df_ops_trading.empty:
+        df_mes = df_ops_trading[(df_ops_trading['fecha_dt'].dt.month == mes_sel) & (df_ops_trading['fecha_dt'].dt.year == ano_sel)]
         if not df_mes.empty:
             for f_dia, group in df_mes.groupby('fecha_dia'):
                 pnl = group['resultado'].sum()
@@ -691,15 +701,14 @@ with tab_calendar:
     mc3.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
 # =============================================================================
-# TAB 2: GRÁFICOS Y ANALYTICS (ESCALA DINÁMICA DE BALANCE)
+# TAB 2: GRÁFICOS Y ANALYTICS
 # =============================================================================
 with tab_analytics:
     st.subheader("📊 Analytics y Curva de Balance por Cuenta")
     
-    if df_ops.empty:
+    if df_ops_trading.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        # 1. VISUALIZACIÓN CONSOLIDADA GLOBAL (CURVA DE BALANCE DINÁMICA)
         st.markdown("### 📈 Rendimiento Consolidado Global")
         
         filtro_periodo_global = st.radio(
@@ -722,7 +731,7 @@ with tab_analytics:
         else:
             fecha_lim_g = None
 
-        df_global_filtered = df_ops.copy()
+        df_global_filtered = df_ops_trading.copy()
         if fecha_lim_g:
             df_global_filtered = df_global_filtered[df_global_filtered['fecha_dia'] >= fecha_lim_g]
 
@@ -732,11 +741,9 @@ with tab_analytics:
             df_ops_sorted = df_global_filtered.sort_values("fecha_dt").copy()
             df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
             
-            # Curva de Balance Consolidada (Capital Inicial + PnL Acumulado Neto)
             tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
             df_ops_sorted["balance_cum"] = tot_inicial + df_ops_sorted["cum_pnl"]
 
-            # Win/Loss/BE global calculado sobre las sesiones del aplicativo
             df_diario_g = obtener_df_diario_clasificado(df_global_filtered, cuentas_raw)
             if not df_diario_g.empty:
                 wins_g = len(df_diario_g[df_diario_g['clasificacion'] == 'WIN'])
@@ -745,7 +752,6 @@ with tab_analytics:
             else:
                 wins_g, losses_g, be_g = 0, 0, 0
 
-            # Zoom dinámico eje Y
             min_bg = df_ops_sorted["balance_cum"].min()
             max_bg = df_ops_sorted["balance_cum"].max()
             diff_bg = max_bg - min_bg
@@ -794,7 +800,6 @@ with tab_analytics:
                 )
                 st.plotly_chart(fig_donut, use_container_width=True)
 
-        # 2. DESGLOSE INDIVIDUAL PARA CADA CUENTA CON FILTRO INDEPENDIENTE & BALANCE
         st.divider()
         st.markdown("### 🏢 Curva de Balance & Distribución por Cuenta Individual")
         
@@ -804,7 +809,6 @@ with tab_analytics:
             acc_ini_bal = float(c_acc.get("balance_inicial", 100000.0))
             
             with st.expander(f"🔹 **{acc_name}** (`#{acc_num_str}`) — Curva de Balance & Win/Loss", expanded=True):
-                # Filtro temporal independiente por cuenta
                 acc_period_filter = st.radio(
                     f"📅 Rango Temporal para {acc_name}:",
                     options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
@@ -824,7 +828,7 @@ with tab_analytics:
                 else:
                     fecha_lim_acc = None
 
-                df_acc_full = df_ops[df_ops["account_number"].astype(str) == acc_num_str].sort_values("fecha_dt").copy()
+                df_acc_full = df_ops_trading[df_ops_trading["account_number"].astype(str) == acc_num_str].sort_values("fecha_dt").copy()
 
                 if fecha_lim_acc:
                     df_acc = df_acc_full[df_acc_full['fecha_dia'] >= fecha_lim_acc].copy()
@@ -834,11 +838,9 @@ with tab_analytics:
                 if df_acc.empty:
                     st.info("Sin operaciones registradas para esta cuenta en el periodo seleccionado.")
                 else:
-                    # Curva de Balance acumulativa para la cuenta individual
                     df_acc["cum_pnl"] = df_acc["resultado"].cumsum()
                     df_acc["balance_cum"] = acc_ini_bal + df_acc["cum_pnl"]
 
-                    # Win/Loss/BE basado en las sesiones del aplicativo para esta cuenta
                     df_diario_acc = obtener_df_diario_clasificado(df_acc, cuentas_raw)
                     if not df_diario_acc.empty:
                         w_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'WIN'])
@@ -847,7 +849,6 @@ with tab_analytics:
                     else:
                         w_acc, l_acc, be_acc = 0, 0, 0
 
-                    # Zoom dinámico individual para la cuenta
                     min_ba = df_acc["balance_cum"].min()
                     max_ba = df_acc["balance_cum"].max()
                     diff_ba = max_ba - min_ba
@@ -896,7 +897,7 @@ with tab_analytics:
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS
+# TAB 3: ESTADO DE CUENTAS (INCLUYE PANEL DE RETIROS CON SPLIT 80%)
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -905,58 +906,40 @@ with tab_cuentas:
         st.info("No hay cuentas seleccionadas.")
     else:
         for c in cuentas:
-            bal_ini = c["balance_inicial"]
-            bal_act = c["balance"]
-            equidad = c["equidad"]
+            acc_num_str = str(c["account_number"])
+            bal_ini = float(c.get("balance_inicial", 0.0))
+            bal_act = float(c.get("balance", 0.0))
+            equidad = float(c.get("equidad", 0.0))
             ganancia = bal_act - bal_ini
             pct_ganancia = (ganancia / bal_ini * 100) if bal_ini > 0 else 0
             
-            p_diaria_max = c["perdida_diaria_max"]
-            p_diaria_act = c["perdida_diaria_actual"]
-            margen_diario = p_diaria_max - p_diaria_act
+            p_max = float(c.get("perdida_diaria_max", 0.0))
+            p_act = float(c.get("perdida_diaria_actual", 0.0))
+            margen_max = p_max - p_act
             
-            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{c['account_number']}] — [{c['estado']}]", expanded=True):
+            estado_tag = str(c.get("estado", "Fase 1"))
+            es_fondeada = ("fondeada" in estado_tag.lower() or "funded" in estado_tag.lower())
+            
+            with st.expander(f"🔹 **{c['nombre_cuenta']}** [{acc_num_str}] — [{estado_tag}]", expanded=True):
                 col_c1, col_c2, col_c3 = st.columns(3)
                 
-                # Metric 1: Balance Actual
                 delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
-                col_c1.metric(
-                    "Balance Actual", 
-                    f"${bal_act:,.2f}", 
-                    delta=delta_bal
-                )
+                col_c1.metric("Balance Actual", f"${bal_act:,.2f}", delta=delta_bal)
                 col_c1.caption(f"Equidad actual: ${equidad:,.2f}")
                 
-                # Metric 2: Margen Pérdida Diaria
-                delta_loss = f"-${p_diaria_act:,.2f}" if p_diaria_act > 0 else "Sin pérdidas hoy"
-                col_c2.metric(
-                    "Margen Pérdida Diaria", 
-                    f"${margen_diario:,.2f}", 
-                    delta=delta_loss,
-                    delta_color="normal" if p_diaria_act > 0 else "off"
-                )
-                col_c2.caption(f"Límite máximo diario: ${p_diaria_max:,.2f}")
+                delta_loss = f"-${p_act:,.2f}" if p_act > 0 else "Sin pérdidas"
+                col_c2.metric("Margen Pérdida Máxima", f"${margen_max:,.2f}", delta=delta_loss, delta_color="normal" if p_act > 0 else "off")
+                col_c2.caption(f"Límite máximo total: ${p_max:,.2f}")
                 
-                # Metric 3: Objetivo Profit Target o Payout
-                if c["estado"] != "Fondeada":
-                    obj = c["objetivo_profit"]
+                if not es_fondeada:
+                    obj = float(c.get("objetivo_profit", 0.0))
                     pct_prog = min(max(ganancia / obj, 0.0), 1.0) if obj > 0 else 1.0
                     delta_obj = f"{ganancia:+,.2f} de {obj:,.2f}"
-                    
-                    col_c3.metric(
-                        "Objetivo Profit Target", 
-                        f"${obj:,.2f}", 
-                        delta=delta_obj
-                    )
+                    col_c3.metric("Objetivo Profit Target", f"${obj:,.2f}", delta=delta_obj)
                 else:
                     delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
-                    col_c3.metric(
-                        "Beneficio Acumulado (Payout)", 
-                        f"${ganancia:,.2f}", 
-                        delta=delta_payout
-                    )
+                    col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
                 
-                # Formateo con etiquetas de color Streamlit :red[...] y :green[...]
                 if ganancia < 0:
                     str_ganancia = f":red[-\\${abs(ganancia):,.2f}]"
                 elif ganancia > 0:
@@ -966,33 +949,69 @@ with tab_cuentas:
                     
                 str_obj = f"\\${c.get('objetivo_profit', 0):,.2f}"
                 
-                # Progreso hacia el Objetivo
-                if c["estado"] != "Fondeada":
-                    obj = c["objetivo_profit"]
+                if not es_fondeada:
+                    obj = float(c.get("objetivo_profit", 0.0))
                     st.write("**Progreso hacia el Objetivo (Phase Pass):**")
                     txt_p = f"{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})"
-                    st.progress(
-                        pct_prog, 
-                        text=txt_p
-                    )
+                    st.progress(pct_prog, text=txt_p)
                 else:
                     st.caption("🟢 Cuenta Fondeada activa.")
                 
-                # Uso del Límite de Pérdida Diaria
-                if p_diaria_act > 0:
-                    str_p_act = f":red[-\\${p_diaria_act:,.2f}]"
+                if p_act > 0:
+                    str_p_act = f":red[-\\${p_act:,.2f}]"
                 else:
                     str_p_act = f":green[\\$0.00]"
                     
-                str_p_max = f"\\${p_diaria_max:,.2f}"
-                
-                pct_drawdown = min(max(p_diaria_act / p_diaria_max, 0.0), 1.0) if p_diaria_max > 0 else 0
-                st.write("**Límite de Pérdida Diaria Consumido Hoy:**")
+                str_p_max = f"\\${p_max:,.2f}"
+                pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
+                st.write("**Límite de Pérdida Máxima Consumido:**")
                 txt_d = f"{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})"
-                st.progress(
-                    pct_drawdown, 
-                    text=txt_d
-                )
+                st.progress(pct_drawdown, text=txt_d)
+
+                # =============================================================
+                # PANEL EXCLUSIVO PARA CUENTAS FONDEADAS: RETIROS Y SPLIT 80%
+                # =============================================================
+                if es_fondeada:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    with st.expander("💸 Historial de Retiros & Profit Split (80%)", expanded=False):
+                        ops_acc = [
+                            op for op in ops_raw 
+                            if str(op.get("account_number")) == acc_num_str and str(op.get("tipo", "")).upper() == "WITHDRAWAL"
+                        ]
+                        
+                        if not ops_acc:
+                            st.info("Sin retiros registrados en MetaTrader 5 para esta cuenta.")
+                        else:
+                            tot_bruto_retirado = sum([abs(float(op.get("resultado", 0))) for op in ops_acc])
+                            tot_neto_trader = tot_bruto_retirado * 0.80
+                            
+                            r_c1, r_c2 = st.columns(2)
+                            r_c1.metric("Total Retirado (Bruto MT5)", f"${tot_bruto_retirado:,.2f}")
+                            r_c2.metric("Retiro Neto Trader (Split 80%)", f"${tot_neto_trader:,.2f}", delta="80% a tu favor", delta_color="normal")
+                            
+                            st.markdown("---")
+                            st.markdown("##### 📜 Desglose de Payouts:")
+                            
+                            df_ret = pd.DataFrame(ops_acc)
+                            df_ret["bruto"] = df_ret["resultado"].apply(lambda x: abs(float(x)))
+                            df_ret["neto_80"] = df_ret["bruto"] * 0.80
+                            df_ret["fecha_clean"] = df_ret["fecha"].str.slice(0, 10)
+                            
+                            df_ret_show = df_ret[["fecha_clean", "bruto", "neto_80", "comentario"]].rename(columns={
+                                "fecha_clean": "Fecha",
+                                "bruto": "Monto Bruto ($)",
+                                "neto_80": "Neto Trader 80% ($)",
+                                "comentario": "Detalle / Referencia"
+                            })
+                            
+                            st.dataframe(
+                                df_ret_show.style.format({
+                                    "Monto Bruto ($)": "${:,.2f}",
+                                    "Neto Trader 80% ($)": "${:,.2f}"
+                                }),
+                                use_container_width=True,
+                                hide_index=True
+                            )
 
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA ESTILO NOTION
@@ -1021,10 +1040,10 @@ with tab_trades:
             key="filtro_multiselect_estados"
         )
         
-    if df_ops.empty:
+    if df_ops_trading.empty:
         st.info("No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        df_diario = obtener_df_diario_clasificado(df_ops, cuentas_raw)
+        df_diario = obtener_df_diario_clasificado(df_ops_trading, cuentas_raw)
         
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
             f_start, f_end = rango_fechas[0], rango_fechas[1]
@@ -1103,9 +1122,6 @@ with tab_trades:
                 
             st.divider()
             
-            # -----------------------------------------------------------------
-            # TABLA LIMPIA EXACTA ESTILO NOTION
-            # -----------------------------------------------------------------
             st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
             st.caption("Tabla de historial alineada. Haz clic en el botón de estado para abrir las capturas.")
             
@@ -1131,7 +1147,7 @@ with tab_trades:
                 
                 matching_ops = [
                     op for op in ops_raw 
-                    if str(op.get("account_number")) == acc_id_str and str(op.get("fecha", "")).startswith(f_str)
+                    if str(op.get("account_number")) == acc_id_str and str(op.get("fecha", "")).startswith(f_str) and str(op.get("tipo", "")).upper() != "WITHDRAWAL"
                 ]
                 
                 op_row = matching_ops[0] if matching_ops else {
@@ -1187,7 +1203,6 @@ with tab_trades:
                             
                         st.markdown("---")
                         
-                        # GALERÍA DE CAPTURAS
                         st.markdown(f"##### 🖼️ Capturas de Pantalla ({num_caps})")
                         if capturas_list:
                             grid_cols = st.columns(min(len(capturas_list), 2))
@@ -1216,7 +1231,6 @@ with tab_trades:
                         else:
                             st.info("No hay capturas adjuntas aún para esta sesión.")
 
-                        # ZONA NATIVA DE SUBIDA DE ARCHIVO
                         st.markdown("---")
                         st.markdown("##### 📤 Adjuntar Nueva Captura")
                         
