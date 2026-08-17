@@ -635,7 +635,6 @@ with tab_calendar:
                     acc_tr = len(acc_group)
                     acc_name = acc_group['nombre_cuenta'].iloc[0] if 'nombre_cuenta' in acc_group.columns else str(acc_num)
                     
-                    # DESGLOSE POR SÍMBOLO
                     sym_breakdown = []
                     for sym_name, sym_group in acc_group.groupby('simbolo'):
                         sym_pnl = sym_group['resultado'].sum()
@@ -667,7 +666,7 @@ with tab_calendar:
     css_cal = """
     <style>
         body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .tradelio-cal-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 35px 10px 10px 10px; overflow: visible !important; }
+        .tradelio-cal-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 45px 15px 45px 15px; overflow: visible !important; }
         .tradelio-grid { display: grid; grid-template-columns: 130px repeat(7, 1fr); gap: 8px; overflow: visible !important; }
         .tradelio-header { text-align: center; font-weight: 700; font-size: 11px; color: #787B86; text-transform: uppercase; padding-bottom: 4px; }
         .week-summary-card { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
@@ -695,24 +694,27 @@ with tab_calendar:
             visibility: hidden;
             opacity: 0;
             position: absolute;
-            bottom: 105%;
-            left: 50%;
-            transform: translateX(-50%);
             background-color: #1A1E29;
             border: 1px solid #2962FF;
             border-radius: 8px;
             padding: 10px 12px;
             width: 270px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+            max-height: 280px;
+            overflow-y: auto;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.85);
             z-index: 9999;
             transition: opacity 0.2s ease, visibility 0.2s ease;
             pointer-events: none;
             text-align: left;
         }
-        .day-tooltip.tooltip-down {
-            bottom: auto !important;
-            top: 105% !important;
-        }
+
+        .day-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
+        .day-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
+
+        .day-tooltip.align-left { left: 0 !important; transform: none !important; }
+        .day-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
+        .day-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
+
         .day-box:hover .day-tooltip {
             visibility: visible;
             opacity: 1;
@@ -745,7 +747,7 @@ with tab_calendar:
         
         html_grid += f"<div class='week-summary-card'><div><span class='week-title'>Week {w_idx}</span><span class='week-pct {pct_cls}'>{week_pct:+.2f}%</span></div><div class='week-val'>${week_pnl:,.2f}</div></div>"
         
-        for day in week:
+        for day_col_idx, day in enumerate(week):
             if day == 0:
                 html_grid += "<div class='day-box empty-day'></div>"
             else:
@@ -771,8 +773,16 @@ with tab_calendar:
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
                     
-                    tooltip_pos_cls = "tooltip-down" if w_idx == 1 else ""
-                    tooltip_html = f"<div class='day-tooltip {tooltip_pos_cls}'>"
+                    # DIRECCIÓN Y ALINEACIÓN DE DESPLEGABLES DÍA
+                    v_cls = "tooltip-down" if w_idx <= 2 else "tooltip-up"
+                    if day_col_idx <= 1:
+                        h_cls = "align-left"
+                    elif day_col_idx >= 5:
+                        h_cls = "align-right"
+                    else:
+                        h_cls = "align-center"
+
+                    tooltip_html = f"<div class='day-tooltip {v_cls} {h_cls}'>"
                     tooltip_html += f"<div class='tooltip-title'>📊 {fecha_obj.strftime('%d %b %Y')}</div>"
                     
                     for acc_info in st_day.get('accounts', []):
@@ -787,7 +797,6 @@ with tab_calendar:
                             <span class='tooltip-acc-val {pnl_cls}'>{sign_str}${pnl_acc:,.2f}</span>
                         </div>
                         """
-                        # DESGLOSE DE SÍMBOLOS DENTRO DE LA CUENTA
                         if acc_info.get('symbols'):
                             tooltip_html += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
                             for s_info in acc_info['symbols']:
@@ -811,7 +820,7 @@ with tab_calendar:
                     
     html_grid += "</div></div>"
     
-    st.components.v1.html(html_grid, height=640, scrolling=True)
+    st.components.v1.html(html_grid, height=660, scrolling=True)
     
     # MÉTRICAS DEL MES SELECCIONADO
     pct_mes = (total_pnl_mes / tot_inicial * 100) if tot_inicial > 0 else 0.0
@@ -823,7 +832,7 @@ with tab_calendar:
     mc4.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
     # =========================================================================
-    # SECCIÓN ANUAL MES A MES CON METRICAS ANUALES
+    # SECCIÓN ANUAL MES A MES CON POSICIONAMIENTO PERFECTO DE DESPLEGABLES
     # =========================================================================
     st.markdown("<br>", unsafe_allow_html=True)
     st.divider()
@@ -840,7 +849,7 @@ with tab_calendar:
     css_annual = """
     <style>
         body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .annual-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 16px; overflow: visible !important; }
+        .annual-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 45px 15px 45px 15px; overflow: visible !important; }
         .annual-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; overflow: visible !important; }
         
         .month-card {
@@ -873,29 +882,33 @@ with tab_calendar:
         .month-pnl { font-size: 18px; font-weight: 800; color: #FFFFFF !important; margin-top: 4px; }
         .month-meta { font-size: 10px; color: #A3A6AF; margin-top: 2px; }
 
-        /* HOVER TOOLTIP MES */
+        /* HOVER TOOLTIP MES CON MAX HEIGHT Y SCROLLING */
         .month-tooltip {
             visibility: hidden;
             opacity: 0;
             position: absolute;
-            bottom: 105%;
-            left: 50%;
-            transform: translateX(-50%);
             background-color: #1A1E29;
             border: 1px solid #2962FF;
             border-radius: 8px;
             padding: 10px 12px;
             width: 270px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+            max-height: 280px;
+            overflow-y: auto;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.85);
             z-index: 9999;
             transition: opacity 0.2s ease, visibility 0.2s ease;
             pointer-events: none;
             text-align: left;
         }
-        .month-tooltip.tooltip-down {
-            bottom: auto !important;
-            top: 105% !important;
-        }
+
+        /* DIRECCIÓN VERTICAL */
+        .month-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
+        .month-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
+
+        /* DIRECCIÓN HORIZONTAL */
+        .month-tooltip.align-left { left: 0 !important; transform: none !important; }
+        .month-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
+        .month-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
 
         .month-card:hover .month-tooltip {
             visibility: visible;
@@ -978,9 +991,20 @@ with tab_calendar:
 
             meta_str = f"{dias_op} días op. | <span class='green-meta'>{w_days}W</span> - <span class='red-meta'>{l_days}L</span>"
 
-            tooltip_pos_cls = "tooltip-down" if m <= 4 else ""
+            # REGLA DE ORIENTACIÓN SEGÚN LA FILA Y COLUMNA
+            # Fila 1 y 2 (Meses 1 a 8): Despliega HACIA ABAJO
+            # Fila 3 (Meses 9 a 12): Despliega HACIA ARRIBA
+            v_cls = "tooltip-down" if m <= 8 else "tooltip-up"
 
-            tooltip_m = f"<div class='month-tooltip {tooltip_pos_cls}'>"
+            # Alineación Horizontal: Evita recorte en los bordes izquierdo/derecho
+            if m in [1, 5, 9]:
+                h_cls = "align-left"
+            elif m in [4, 8, 12]:
+                h_cls = "align-right"
+            else:
+                h_cls = "align-center"
+
+            tooltip_m = f"<div class='month-tooltip {v_cls} {h_cls}'>"
             tooltip_m += f"<div class='tooltip-title'>📊 {m_name} {int(ano_sel_annual)}</div>"
             for acc_i in acc_m_breakdown:
                 p_acc = acc_i['pnl']
@@ -1008,7 +1032,7 @@ with tab_calendar:
                             <span class='{s_cls}'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
-                    tooltip_m += "</div>"
+                    tooltip_html = tooltip_m + "</div>"
             tooltip_m += "</div>"
 
             html_annual += f"""
@@ -1036,7 +1060,7 @@ with tab_calendar:
 
     html_annual += "</div></div>"
     
-    st.components.v1.html(html_annual, height=480, scrolling=True)
+    st.components.v1.html(html_annual, height=560, scrolling=True)
 
     # MÉTRICAS DEL AÑO SELECCIONADO
     pct_ano = (total_pnl_ano / tot_inicial * 100) if tot_inicial > 0 else 0.0
@@ -1493,7 +1517,6 @@ with tab_trades:
             st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
             st.caption("Tabla de historial alineada. Haz clic en el botón de estado para abrir las capturas.")
             
-            # NUEVA COLUMNA DE SÍMBOLO AGREGADA AL ENCABEZADO
             hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6, hdr_c7 = st.columns([1.0, 1.5, 1.1, 1.2, 1.2, 1.0, 1.5])
             hdr_c1.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>FECHA</span>", unsafe_allow_html=True)
             hdr_c2.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>CUENTA</span>", unsafe_allow_html=True)
@@ -1527,7 +1550,6 @@ with tab_trades:
                     "resultado": res_num
                 }
 
-                # OBTENER SÍMBOLOS OPERADOS EN LA SESIÓN
                 simbolos_list = list(set([str(op.get("simbolo", "N/A")).strip().upper() for op in matching_ops if op.get("simbolo") and str(op.get("simbolo")).upper() != "N/A"]))
                 simbolo_str = ", ".join(simbolos_list) if simbolos_list else "N/A"
                 
