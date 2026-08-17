@@ -761,10 +761,14 @@ with tab_calendar:
     
     st.components.v1.html(html_grid, height=640, scrolling=True)
     
-    mc1, mc2, mc3 = st.columns(3)
-    mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}")
-    mc2.metric("Días Verdes (Win)", f"{dias_ganadores} días")
-    mc3.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
+    # METRICAS DE RESUMEN DEL MES (% INCLUIDO)
+    pct_mes = (total_pnl_mes / tot_inicial * 100) if tot_inicial > 0 else 0.0
+
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    mc1.metric("PnL Total del Mes", f"${total_pnl_mes:,.2f}", delta=f"{pct_mes:+.2f}%")
+    mc2.metric("% Rendimiento Mes", f"{pct_mes:+.2f}%")
+    mc3.metric("Días Verdes (Win)", f"{dias_ganadores} días")
+    mc4.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
 # =============================================================================
 # TAB 2: GRÁFICOS Y ANALYTICS
@@ -963,7 +967,7 @@ with tab_analytics:
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
 # =============================================================================
-# TAB 3: ESTADO DE CUENTAS (BARRAS DE PROGRESO CORREGIDAS)
+# TAB 3: ESTADO DE CUENTAS
 # =============================================================================
 with tab_cuentas:
     st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
@@ -1019,7 +1023,6 @@ with tab_cuentas:
                     delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
                     col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
                 
-                # FORMATO DE CADENAS DE TEXTO HTML LIMPIAS
                 if ganancia < 0:
                     str_ganancia = f"<span style='color:#EF5350; font-weight:bold;'>-${abs(ganancia):,.2f}</span>"
                 elif ganancia > 0:
@@ -1029,7 +1032,6 @@ with tab_cuentas:
                     
                 str_obj = f"${c.get('objetivo_profit', 0):,.2f}"
                 
-                # 🟢 BARRA DE PROGRESO HACIA EL OBJETIVO EN VERDE (#26A69A)
                 if not es_fondeada:
                     obj = float(c.get("objetivo_profit", 0.0))
                     pct_p_val = min(max(pct_prog * 100, 0.0), 100.0)
@@ -1052,7 +1054,6 @@ with tab_cuentas:
                 pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
                 pct_d_val = min(max(pct_drawdown * 100, 0.0), 100.0)
                 
-                # 🔴 BARRA DE PROGRESO DE PÉRDIDA MÁXIMA EN ROJO (#EF5350)
                 st.write("**Límite de Pérdida Máxima Consumido:**")
                 st.markdown(f"""
                 <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
