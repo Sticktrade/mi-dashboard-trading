@@ -195,6 +195,7 @@ def process_raw_operations(ops_list):
             op_dict['comision_calc'] = 0.0
             op_dict['swap_calc'] = 0.0
             op_dict['resultado'] = float(op_dict.get('resultado', 0.0) or 0.0)
+            op_dict['simbolo'] = "WITHDRAWAL"
             processed_ops.append(op_dict)
             continue
 
@@ -212,15 +213,27 @@ def process_raw_operations(ops_list):
                                 pass
             return None, 0.0
 
+        def find_str_val(candidates):
+            for k, v in op_dict.items():
+                clean_k = str(k).strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+                for cand in candidates:
+                    clean_cand = cand.strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+                    if clean_k == clean_cand:
+                        if v is not None and str(v).strip() != "":
+                            return str(v).strip().upper()
+            return "N/A"
+
         profit_keys = ['resultado', 'profit', 'ganancia', 'pnl', 'netprofit', 'rawprofit', 'beneficio', 'monto']
         comm_keys   = ['comision', 'comisiones', 'commission', 'commissions', 'comm', 'fee', 'fees']
         swap_keys   = ['swap', 'swaps', 'rollover']
         vol_keys    = ['volume', 'volumen', 'lotes', 'lots', 'lotaje']
+        sym_keys    = ['simbolo', 'symbol', 'instrumento', 'par', 'ticker', 'item', 'asset', 'pair']
 
         p_key, raw_profit = find_val(profit_keys)
         c_key, comm_val   = find_val(comm_keys)
         s_key, swap_val   = find_val(swap_keys)
         v_key, vol_val    = find_val(vol_keys)
+        sym_val           = find_str_val(sym_keys)
 
         nombre_cta = op_dict.get('nombre_cuenta', '')
         
@@ -234,6 +247,7 @@ def process_raw_operations(ops_list):
         op_dict['comision_calc'] = abs(comm_val)
         op_dict['swap_calc'] = swap_val
         op_dict['resultado'] = net_result
+        op_dict['simbolo'] = sym_val
         op_dict['comm_column_found'] = c_key if c_key else "NINGUNA"
 
         processed_ops.append(op_dict)
@@ -612,7 +626,7 @@ with tab_calendar:
             for f_dia, group in df_mes.groupby('fecha_dia'):
                 pnl = group['resultado'].sum()
                 tr_cnt = len(group)
-                w_cnt = len(group[group['win_loss'] == 'WIN'])
+                w_cnt = len(group[group['resultado'] > 0])
                 wr_val = (w_cnt / tr_cnt * 100) if tr_cnt > 0 else 0
                 
                 acc_breakdown = []
@@ -620,11 +634,24 @@ with tab_calendar:
                     acc_pnl = acc_group['resultado'].sum()
                     acc_tr = len(acc_group)
                     acc_name = acc_group['nombre_cuenta'].iloc[0] if 'nombre_cuenta' in acc_group.columns else str(acc_num)
+                    
+                    # DESGLOSE POR SÍMBOLO
+                    sym_breakdown = []
+                    for sym_name, sym_group in acc_group.groupby('simbolo'):
+                        sym_pnl = sym_group['resultado'].sum()
+                        sym_tr = len(sym_group)
+                        sym_breakdown.append({
+                            'symbol': sym_name,
+                            'pnl': sym_pnl,
+                            'trades': sym_tr
+                        })
+
                     acc_breakdown.append({
                         'name': acc_name,
                         'account_number': acc_num,
                         'pnl': acc_pnl,
-                        'trades': acc_tr
+                        'trades': acc_tr,
+                        'symbols': sym_breakdown
                     })
 
                 daily_stats[f_dia] = {
@@ -675,7 +702,7 @@ with tab_calendar:
             border: 1px solid #2962FF;
             border-radius: 8px;
             padding: 10px 12px;
-            width: 230px;
+            width: 270px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.7);
             z-index: 9999;
             transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -692,7 +719,7 @@ with tab_calendar:
         }
         .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
-        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
+        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
         .tooltip-acc-val { font-weight: 800; font-size: 11px; }
     </style>
     """
@@ -747,6 +774,7 @@ with tab_calendar:
                     tooltip_pos_cls = "tooltip-down" if w_idx == 1 else ""
                     tooltip_html = f"<div class='day-tooltip {tooltip_pos_cls}'>"
                     tooltip_html += f"<div class='tooltip-title'>📊 {fecha_obj.strftime('%d %b %Y')}</div>"
+                    
                     for acc_info in st_day.get('accounts', []):
                         pnl_acc = acc_info['pnl']
                         tr_acc = acc_info['trades']
@@ -759,6 +787,22 @@ with tab_calendar:
                             <span class='tooltip-acc-val {pnl_cls}'>{sign_str}${pnl_acc:,.2f}</span>
                         </div>
                         """
+                        # DESGLOSE DE SÍMBOLOS DENTRO DE LA CUENTA
+                        if acc_info.get('symbols'):
+                            tooltip_html += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
+                            for s_info in acc_info['symbols']:
+                                s_sym = s_info['symbol']
+                                s_pnl = s_info['pnl']
+                                s_tr = s_info['trades']
+                                s_cls = "green-meta" if s_pnl >= 0 else "red-meta"
+                                s_sign = "+" if s_pnl > 0 else ""
+                                tooltip_html += f"""
+                                <div class='tooltip-row' style='font-size:10px; color:#A3A6AF; margin-bottom:2px;'>
+                                    <span>↳ <b>{s_sym}</b> <span style='color:#787B86;'>({s_tr} ops)</span></span>
+                                    <span class='{s_cls}'>{s_sign}${s_pnl:,.2f}</span>
+                                </div>
+                                """
+                            tooltip_html += "</div>"
                     tooltip_html += "</div>"
                         
                     html_grid += f"<div class='day-box {box_cls}'>{tooltip_html}<div class='day-num'>{day}</div><div class='day-content'><div class='day-pnl'>{pnl_fmt}</div><div class='day-meta'>{meta_str}</div></div></div>"
@@ -841,14 +885,13 @@ with tab_calendar:
             border: 1px solid #2962FF;
             border-radius: 8px;
             padding: 10px 12px;
-            width: 230px;
+            width: 270px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.7);
             z-index: 9999;
             transition: opacity 0.2s ease, visibility 0.2s ease;
             pointer-events: none;
             text-align: left;
         }
-        /* CORRECCIÓN PARA MESES SUPERIORES (FILA 1) */
         .month-tooltip.tooltip-down {
             bottom: auto !important;
             top: 105% !important;
@@ -860,7 +903,7 @@ with tab_calendar:
         }
         .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
-        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
+        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
         .tooltip-acc-val { font-weight: 800; font-size: 11px; }
     </style>
     """
@@ -894,16 +937,28 @@ with tab_calendar:
             else:
                 w_days, l_days, dias_op = 0, 0, 0
 
-            # Desglose de cuentas
+            # Desglose de cuentas y símbolos para el mes
             acc_m_breakdown = []
             for acc_num, acc_grp in df_m_ops.groupby('account_number'):
                 acc_pnl_m = acc_grp['resultado'].sum()
                 acc_tr_m = len(acc_grp)
                 acc_nm_m = acc_grp['nombre_cuenta'].iloc[0] if 'nombre_cuenta' in acc_grp.columns else str(acc_num)
+                
+                sym_m_breakdown = []
+                for sym_name, sym_grp in acc_grp.groupby('simbolo'):
+                    sym_pnl_m = sym_grp['resultado'].sum()
+                    sym_tr_m = len(sym_grp)
+                    sym_m_breakdown.append({
+                        'symbol': sym_name,
+                        'pnl': sym_pnl_m,
+                        'trades': sym_tr_m
+                    })
+
                 acc_m_breakdown.append({
                     'name': acc_nm_m,
                     'pnl': acc_pnl_m,
-                    'trades': acc_tr_m
+                    'trades': acc_tr_m,
+                    'symbols': sym_m_breakdown
                 })
 
             if pnl_m > 0.01:
@@ -923,10 +978,8 @@ with tab_calendar:
 
             meta_str = f"{dias_op} días op. | <span class='green-meta'>{w_days}W</span> - <span class='red-meta'>{l_days}L</span>"
 
-            # SI EL MES ES DE LA PRIMERA FILA (1 A 4), EL TOOLTIP SE DESPLIEGA HACIA ABAJO
             tooltip_pos_cls = "tooltip-down" if m <= 4 else ""
 
-            # Tooltip de hover
             tooltip_m = f"<div class='month-tooltip {tooltip_pos_cls}'>"
             tooltip_m += f"<div class='tooltip-title'>📊 {m_name} {int(ano_sel_annual)}</div>"
             for acc_i in acc_m_breakdown:
@@ -941,6 +994,21 @@ with tab_calendar:
                     <span class='tooltip-acc-val {p_cls}'>{s_str}${p_acc:,.2f}</span>
                 </div>
                 """
+                if acc_i.get('symbols'):
+                    tooltip_m += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
+                    for s_info in acc_i['symbols']:
+                        s_sym = s_info['symbol']
+                        s_pnl = s_info['pnl']
+                        s_tr = s_info['trades']
+                        s_cls = "green-meta" if s_pnl >= 0 else "red-meta"
+                        s_sign = "+" if s_pnl > 0 else ""
+                        tooltip_m += f"""
+                        <div class='tooltip-row' style='font-size:10px; color:#A3A6AF; margin-bottom:2px;'>
+                            <span>↳ <b>{s_sym}</b> <span style='color:#787B86;'>({s_tr} ops)</span></span>
+                            <span class='{s_cls}'>{s_sign}${s_pnl:,.2f}</span>
+                        </div>
+                        """
+                    tooltip_m += "</div>"
             tooltip_m += "</div>"
 
             html_annual += f"""
@@ -1314,11 +1382,11 @@ with tab_cuentas:
                             )
 
 # =============================================================================
-# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA ESTILO NOTION
+# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
 with tab_trades:
     st.subheader("📖 Historial & Analítica de Operaciones")
-    st.caption("Filtra y revisa las sesiones por fecha, cuenta y estado.")
+    st.caption("Filtra y revisa las sesiones por fecha, cuenta, símbolo y estado.")
     
     hoy = datetime.date.today()
     lunes_semana_actual = hoy - datetime.timedelta(days=hoy.weekday())
@@ -1425,13 +1493,15 @@ with tab_trades:
             st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
             st.caption("Tabla de historial alineada. Haz clic en el botón de estado para abrir las capturas.")
             
-            hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
+            # NUEVA COLUMNA DE SÍMBOLO AGREGADA AL ENCABEZADO
+            hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6, hdr_c7 = st.columns([1.0, 1.5, 1.1, 1.2, 1.2, 1.0, 1.5])
             hdr_c1.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>FECHA</span>", unsafe_allow_html=True)
             hdr_c2.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>CUENTA</span>", unsafe_allow_html=True)
             hdr_c3.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ID CUENTA</span>", unsafe_allow_html=True)
-            hdr_c4.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>RESULTADO ($)</span>", unsafe_allow_html=True)
-            hdr_c5.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>% REND.</span>", unsafe_allow_html=True)
-            hdr_c6.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ESTADO / CAPTURAS</span>", unsafe_allow_html=True)
+            hdr_c4.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>SÍMBOLO</span>", unsafe_allow_html=True)
+            hdr_c5.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>RESULTADO ($)</span>", unsafe_allow_html=True)
+            hdr_c6.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>% REND.</span>", unsafe_allow_html=True)
+            hdr_c7.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ESTADO / CAPTURAS</span>", unsafe_allow_html=True)
             
             st.markdown("<hr style='margin: 6px 0 10px 0; border-color: #282D3C;'>", unsafe_allow_html=True)
 
@@ -1456,6 +1526,10 @@ with tab_trades:
                     "nombre_cuenta": acc_name,
                     "resultado": res_num
                 }
+
+                # OBTENER SÍMBOLOS OPERADOS EN LA SESIÓN
+                simbolos_list = list(set([str(op.get("simbolo", "N/A")).strip().upper() for op in matching_ops if op.get("simbolo") and str(op.get("simbolo")).upper() != "N/A"]))
+                simbolo_str = ", ".join(simbolos_list) if simbolos_list else "N/A"
                 
                 capturas_list = parse_capturas(op_row.get("capturas"))
                 num_caps = len(capturas_list)
@@ -1475,7 +1549,7 @@ with tab_trades:
 
                 row_key = f"pop_{acc_id_str}_{f_str}_{idx}"
                 
-                c1, c2, c3, c4, c5, c6 = st.columns([1.1, 1.8, 1.2, 1.3, 1.1, 1.6])
+                c1, c2, c3, c4, c5, c6, c7 = st.columns([1.0, 1.5, 1.1, 1.2, 1.2, 1.0, 1.5])
                 
                 with c1:
                     st.markdown(f"<span style='font-size:13px;'>{f_str}</span>", unsafe_allow_html=True)
@@ -1484,13 +1558,15 @@ with tab_trades:
                 with c3:
                     st.markdown(f"<code style='background:#1A1E29; color:#A3A6AF; padding:2px 6px; border-radius:4px;'>#{acc_id_str}</code>", unsafe_allow_html=True)
                 with c4:
-                    st.markdown(res_html, unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:12px; font-weight:700; color:#2962FF;'>{simbolo_str}</span>", unsafe_allow_html=True)
                 with c5:
-                    st.markdown(pct_html, unsafe_allow_html=True)
+                    st.markdown(res_html, unsafe_allow_html=True)
                 with c6:
+                    st.markdown(pct_html, unsafe_allow_html=True)
+                with c7:
                     with st.popover(badge, use_container_width=True):
                         st.markdown(f"### 📊 Sesión: {acc_name} (`#{acc_id_str}`)")
-                        st.markdown(f"**Fecha:** `{f_str}` | **Resultado Neto:** {res_html} ({pct_html})", unsafe_allow_html=True)
+                        st.markdown(f"**Fecha:** `{f_str}` | **Símbolo(s):** `{simbolo_str}` | **Resultado Neto:** {res_html} ({pct_html})", unsafe_allow_html=True)
                         
                         tot_comm = sum([float(op.get("comision_calc", 0)) for op in matching_ops])
                         tot_swap = sum([float(op.get("swap_calc", 0)) for op in matching_ops])
