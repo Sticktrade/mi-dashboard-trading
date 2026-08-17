@@ -607,7 +607,11 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 # TAB 1: CALENDARIO DE RESULTADOS (MENSUAL + ANUAL MES A MES)
 # =============================================================================
 with tab_calendar:
-    st.subheader("📅 Calendario Mensual de Resultados")
+    col_t1, col_t2 = st.columns([3, 1])
+    with col_t1:
+        st.subheader("📅 Calendario Mensual de Resultados")
+    with col_t2:
+        mostrar_simbolos_cal = st.toggle("👁️ Desglose por símbolo", value=True, key="toggle_simbolos_cal")
     
     now = datetime.datetime.now()
     c_m, c_y = st.columns([1, 1])
@@ -722,7 +726,7 @@ with tab_calendar:
         .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
         .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-        .tooltip-acc-val { font-weight: 800; font-size: 11px; }
+        .tooltip-acc-val { font-weight: 800; font-size: 11px; color: #FFFFFF !important; }
     </style>
     """
     
@@ -788,26 +792,26 @@ with tab_calendar:
                         pnl_acc = acc_info['pnl']
                         tr_acc = acc_info['trades']
                         acc_n = acc_info['name']
-                        pnl_cls = "green-meta" if pnl_acc >= 0 else "red-meta"
                         sign_str = "+" if pnl_acc > 0 else ""
+                        
                         tooltip_html += f"""
                         <div class='tooltip-row'>
-                            <span class='tooltip-acc-name'><span style='color:#787B86; font-weight:700;'>({tr_acc} ops)</span> {acc_n}</span>
-                            <span class='tooltip-acc-val {pnl_cls}'>{sign_str}${pnl_acc:,.2f}</span>
+                            <span class='tooltip-acc-name'><span style='color:#FFFFFF; font-weight:700;'>({tr_acc} ops)</span> {acc_n}</span>
+                            <span class='tooltip-acc-val' style='color:#FFFFFF; font-weight:800;'>{sign_str}${pnl_acc:,.2f}</span>
                         </div>
                         """
-                        if acc_info.get('symbols'):
+                        # MOSTRAR DESGLOSE POR SÍMBOLO SI EL TOGGLE ESTÁ ACTIVO
+                        if mostrar_simbolos_cal and acc_info.get('symbols'):
                             tooltip_html += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
                             for s_info in acc_info['symbols']:
                                 s_sym = s_info['symbol']
                                 s_pnl = s_info['pnl']
                                 s_tr = s_info['trades']
-                                s_cls = "green-meta" if s_pnl >= 0 else "red-meta"
                                 s_sign = "+" if s_pnl > 0 else ""
                                 tooltip_html += f"""
-                                <div class='tooltip-row' style='font-size:10px; color:#A3A6AF; margin-bottom:2px;'>
-                                    <span>↳ <b>{s_sym}</b> <span style='color:#787B86;'>({s_tr} ops)</span></span>
-                                    <span class='{s_cls}'>{s_sign}${s_pnl:,.2f}</span>
+                                <div class='tooltip-row' style='font-size:10px; color:#E0E3EB; margin-bottom:2px;'>
+                                    <span>↳ <b>{s_sym}</b> <span style='color:#FFFFFF;'>({s_tr} ops)</span></span>
+                                    <span style='color:#FFFFFF; font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                                 </div>
                                 """
                             tooltip_html += "</div>"
@@ -831,7 +835,7 @@ with tab_calendar:
     mc4.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
     # =========================================================================
-    # SECCIÓN ANUAL MES A MES (CORREGIDA)
+    # SECCIÓN ANUAL MES A MES
     # =========================================================================
     st.markdown("<br>", unsafe_allow_html=True)
     st.divider()
@@ -913,7 +917,7 @@ with tab_calendar:
         .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
         .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-        .tooltip-acc-val { font-weight: 800; font-size: 11px; }
+        .tooltip-acc-val { font-weight: 800; font-size: 11px; color: #FFFFFF !important; }
     </style>
     """
 
@@ -1001,26 +1005,25 @@ with tab_calendar:
                 p_acc = acc_i['pnl']
                 t_acc = acc_i['trades']
                 n_acc = acc_i['name']
-                p_cls = "green-meta" if p_acc >= 0 else "red-meta"
                 s_str = "+" if p_acc > 0 else ""
                 tooltip_m += f"""
                 <div class='tooltip-row'>
-                    <span class='tooltip-acc-name'><span style='color:#787B86; font-weight:700;'>({t_acc} ops)</span> {n_acc}</span>
-                    <span class='tooltip-acc-val {p_cls}'>{s_str}${p_acc:,.2f}</span>
+                    <span class='tooltip-acc-name'><span style='color:#FFFFFF; font-weight:700;'>({t_acc} ops)</span> {n_acc}</span>
+                    <span class='tooltip-acc-val' style='color:#FFFFFF; font-weight:800;'>{s_str}${p_acc:,.2f}</span>
                 </div>
                 """
-                if acc_i.get('symbols'):
+                # MOSTRAR DESGLOSE POR SÍMBOLO SI EL TOGGLE ESTÁ ACTIVO
+                if mostrar_simbolos_cal and acc_i.get('symbols'):
                     tooltip_m += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
                     for s_info in acc_i['symbols']:
                         s_sym = s_info['symbol']
                         s_pnl = s_info['pnl']
                         s_tr = s_info['trades']
-                        s_cls = "green-meta" if s_pnl >= 0 else "red-meta"
                         s_sign = "+" if s_pnl > 0 else ""
                         tooltip_m += f"""
-                        <div class='tooltip-row' style='font-size:10px; color:#A3A6AF; margin-bottom:2px;'>
-                            <span>↳ <b>{s_sym}</b> <span style='color:#787B86;'>({s_tr} ops)</span></span>
-                            <span class='{s_cls}'>{s_sign}${s_pnl:,.2f}</span>
+                        <div class='tooltip-row' style='font-size:10px; color:#E0E3EB; margin-bottom:2px;'>
+                            <span>↳ <b>{s_sym}</b> <span style='color:#FFFFFF;'>({s_tr} ops)</span></span>
+                            <span style='color:#FFFFFF; font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
                     tooltip_m += "</div>"
