@@ -590,15 +590,18 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: CALENDARIO DE RESULTADOS
+# TAB 1: CALENDARIO DE RESULTADOS (MENSUAL + ANUAL MES A MES)
 # =============================================================================
 with tab_calendar:
     st.subheader("📅 Calendario Mensual de Resultados")
     
     now = datetime.datetime.now()
     c_m, c_y = st.columns([1, 1])
+    
+    MESES_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    
     with c_m:
-        mes_sel = st.selectbox("Mes:", range(1, 13), index=now.month - 1, format_func=lambda x: calendar.month_name[x])
+        mes_sel = st.selectbox("Mes:", range(1, 13), index=now.month - 1, format_func=lambda x: MESES_ES[x-1])
     with c_y:
         ano_sel = st.number_input("Año:", min_value=2024, max_value=2030, value=now.year)
         
@@ -761,7 +764,7 @@ with tab_calendar:
     
     st.components.v1.html(html_grid, height=640, scrolling=True)
     
-    # METRICAS DE RESUMEN DEL MES (% INCLUIDO)
+    # MÉTRICAS DEL MES SELECCIONADO
     pct_mes = (total_pnl_mes / tot_inicial * 100) if tot_inicial > 0 else 0.0
 
     mc1, mc2, mc3, mc4 = st.columns(4)
@@ -769,6 +772,176 @@ with tab_calendar:
     mc2.metric("% Rendimiento Mes", f"{pct_mes:+.2f}%")
     mc3.metric("Días Verdes (Win)", f"{dias_ganadores} días")
     mc4.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
+
+    # =========================================================================
+    # SECCIÓN NUEVA: CALENDARIO ANUAL (MES A MES)
+    # =========================================================================
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.divider()
+    st.subheader(f"🗓️ Resumen Anual — Año {int(ano_sel)}")
+    st.caption("Evolución mensual consolidada según las cuentas seleccionadas.")
+
+    df_ano = df_ops_trading[df_ops_trading['fecha_dt'].dt.year == ano_sel] if not df_ops_trading.empty else pd.DataFrame()
+    
+    css_annual = """
+    <style>
+        body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .annual-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 16px; overflow: visible !important; }
+        .annual-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; overflow: visible !important; }
+        
+        .month-card {
+            position: relative;
+            background-color: #1A1E29;
+            border: 1px solid #282D3C;
+            border-radius: 10px;
+            padding: 12px 14px;
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: border-color 0.2s ease;
+            min-height: 95px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .month-card:hover {
+            border-color: #2962FF !important;
+        }
+        .month-card.win-month { background-color: #11321E !important; border: 1px solid #1F5938 !important; }
+        .month-card.loss-month { background-color: #3C1C21 !important; border: 1px solid #63272F !important; }
+
+        .month-header { display: flex; justify-content: space-between; align-items: center; }
+        .month-title { font-size: 12px; font-weight: 800; color: #A3A6AF; text-transform: uppercase; letter-spacing: 0.5px; }
+        .month-pct { font-size: 11px; font-weight: 800; }
+        .month-pct.green { color: #4ADE80 !important; }
+        .month-pct.red { color: #EF5350 !important; }
+        .month-pct.neutral { color: #787B86 !important; }
+
+        .month-pnl { font-size: 18px; font-weight: 800; color: #FFFFFF !important; margin-top: 4px; }
+        .month-meta { font-size: 10px; color: #A3A6AF; margin-top: 2px; }
+
+        /* HOVER TOOLTIP MES */
+        .month-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 105%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1A1E29;
+            border: 1px solid #2962FF;
+            border-radius: 8px;
+            padding: 10px 12px;
+            width: 230px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+            z-index: 9999;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            pointer-events: none;
+            text-align: left;
+        }
+        .month-card:hover .month-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
+        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
+        .tooltip-acc-val { font-weight: 800; font-size: 11px; }
+    </style>
+    """
+
+    html_annual = f"{css_annual}<div class='annual-container'><div class='annual-grid'>"
+
+    for m in range(1, 13):
+        m_name = MESES_ES[m-1]
+        
+        if not df_ano.empty:
+            df_m_ops = df_ano[df_ano['fecha_dt'].dt.month == m]
+        else:
+            df_m_ops = pd.DataFrame()
+
+        if not df_m_ops.empty:
+            pnl_m = df_m_ops['resultado'].sum()
+            tr_m = len(df_m_ops)
+            pct_m = (pnl_m / tot_inicial * 100) if tot_inicial > 0 else 0.0
+
+            df_diario_m = obtener_df_diario_clasificado(df_m_ops, cuentas_raw)
+            if not df_diario_m.empty:
+                w_days = len(df_diario_m[df_diario_m['clasificacion'] == 'WIN'])
+                l_days = len(df_diario_m[df_diario_m['clasificacion'] == 'LOSS'])
+                dias_op = len(df_diario_m)
+            else:
+                w_days, l_days, dias_op = 0, 0, 0
+
+            # Desglose de cuentas
+            acc_m_breakdown = []
+            for acc_num, acc_grp in df_m_ops.groupby('account_number'):
+                acc_pnl_m = acc_grp['resultado'].sum()
+                acc_tr_m = len(acc_grp)
+                acc_nm_m = acc_grp['nombre_cuenta'].iloc[0] if 'nombre_cuenta' in acc_grp.columns else str(acc_num)
+                acc_m_breakdown.append({
+                    'name': acc_nm_m,
+                    'pnl': acc_pnl_m,
+                    'trades': acc_tr_m
+                })
+
+            if pnl_m > 0.01:
+                card_cls = "win-month"
+                pct_cls = "green"
+                pnl_fmt = f"+${pnl_m:,.2f}"
+            elif pnl_m < -0.01:
+                card_cls = "loss-month"
+                pct_cls = "red"
+                pnl_fmt = f"-${abs(pnl_m):,.2f}"
+            else:
+                card_cls = ""
+                pct_cls = "neutral"
+                pnl_fmt = "$0.00"
+
+            meta_str = f"{dias_op} días op. | <span class='green-meta'>{w_days}W</span> - <span class='red-meta'>{l_days}L</span>"
+
+            # Tooltip de hover
+            tooltip_m = "<div class='month-tooltip'>"
+            tooltip_m += f"<div class='tooltip-title'>📊 {m_name} {int(ano_sel)}</div>"
+            for acc_i in acc_m_breakdown:
+                p_acc = acc_i['pnl']
+                t_acc = acc_i['trades']
+                n_acc = acc_i['name']
+                p_cls = "green-meta" if p_acc >= 0 else "red-meta"
+                s_str = "+" if p_acc > 0 else ""
+                tooltip_m += f"""
+                <div class='tooltip-row'>
+                    <span class='tooltip-acc-name'><span style='color:#787B86; font-weight:700;'>({t_acc} ops)</span> {n_acc}</span>
+                    <span class='tooltip-acc-val {p_cls}'>{s_str}${p_acc:,.2f}</span>
+                </div>
+                """
+            tooltip_m += "</div>"
+
+            html_annual += f"""
+            <div class='month-card {card_cls}'>
+                {tooltip_m}
+                <div class='month-header'>
+                    <span class='month-title'>{m_name}</span>
+                    <span class='month-pct {pct_cls}'>{pct_m:+.2f}%</span>
+                </div>
+                <div class='month-pnl'>{pnl_fmt}</div>
+                <div class='month-meta'>{meta_str}</div>
+            </div>
+            """
+        else:
+            html_annual += f"""
+            <div class='month-card'>
+                <div class='month-header'>
+                    <span class='month-title'>{m_name}</span>
+                    <span class='month-pct neutral'>0.00%</span>
+                </div>
+                <div class='month-pnl'>$0.00</div>
+                <div class='month-meta'>Sin operaciones</div>
+            </div>
+            """
+
+    html_annual += "</div></div>"
+    
+    st.components.v1.html(html_annual, height=420, scrolling=True)
 
 # =============================================================================
 # TAB 2: GRÁFICOS Y ANALYTICS
