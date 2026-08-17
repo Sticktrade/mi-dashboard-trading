@@ -127,7 +127,7 @@ st.markdown("""
         align-items: center !important;
     }
     
-    /* MODAL Y SOPORTE DE GESTOS TÁCTILES (PELLIZCO / ZOOM MÓVIL) */
+    /* MODAL Y SOPORTE DE GESTOS TÁCTILES */
     img {
         touch-action: pan-x pan-y pinch-zoom !important;
         max-width: 100% !important;
@@ -342,7 +342,7 @@ def mostrar_modal_zoom(cap):
             st.caption("Sin notas técnicas registradas.")
 
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / ORGANIZACIÓN: FUNDED -> CHALLENGES -> BREACHED
+# 3. BARRA LATERAL / ORGANIZACIÓN DE CUENTAS
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ StickTrade")
 st.sidebar.caption("Analytics de Cuentas de Fondeo")
@@ -773,7 +773,6 @@ with tab_calendar:
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
                     
-                    # DIRECCIÓN Y ALINEACIÓN DE DESPLEGABLES DÍA
                     v_cls = "tooltip-down" if w_idx <= 2 else "tooltip-up"
                     if day_col_idx <= 1:
                         h_cls = "align-left"
@@ -832,7 +831,7 @@ with tab_calendar:
     mc4.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
     # =========================================================================
-    # SECCIÓN ANUAL MES A MES CON POSICIONAMIENTO PERFECTO DE DESPLEGABLES
+    # SECCIÓN ANUAL MES A MES (CORREGIDA)
     # =========================================================================
     st.markdown("<br>", unsafe_allow_html=True)
     st.divider()
@@ -882,7 +881,6 @@ with tab_calendar:
         .month-pnl { font-size: 18px; font-weight: 800; color: #FFFFFF !important; margin-top: 4px; }
         .month-meta { font-size: 10px; color: #A3A6AF; margin-top: 2px; }
 
-        /* HOVER TOOLTIP MES CON MAX HEIGHT Y SCROLLING */
         .month-tooltip {
             visibility: hidden;
             opacity: 0;
@@ -901,11 +899,9 @@ with tab_calendar:
             text-align: left;
         }
 
-        /* DIRECCIÓN VERTICAL */
         .month-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
         .month-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
 
-        /* DIRECCIÓN HORIZONTAL */
         .month-tooltip.align-left { left: 0 !important; transform: none !important; }
         .month-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
         .month-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
@@ -950,7 +946,6 @@ with tab_calendar:
             else:
                 w_days, l_days, dias_op = 0, 0, 0
 
-            # Desglose de cuentas y símbolos para el mes
             acc_m_breakdown = []
             for acc_num, acc_grp in df_m_ops.groupby('account_number'):
                 acc_pnl_m = acc_grp['resultado'].sum()
@@ -991,12 +986,8 @@ with tab_calendar:
 
             meta_str = f"{dias_op} días op. | <span class='green-meta'>{w_days}W</span> - <span class='red-meta'>{l_days}L</span>"
 
-            # REGLA DE ORIENTACIÓN SEGÚN LA FILA Y COLUMNA
-            # Fila 1 y 2 (Meses 1 a 8): Despliega HACIA ABAJO
-            # Fila 3 (Meses 9 a 12): Despliega HACIA ARRIBA
             v_cls = "tooltip-down" if m <= 8 else "tooltip-up"
 
-            # Alineación Horizontal: Evita recorte en los bordes izquierdo/derecho
             if m in [1, 5, 9]:
                 h_cls = "align-left"
             elif m in [4, 8, 12]:
@@ -1032,7 +1023,7 @@ with tab_calendar:
                             <span class='{s_cls}'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
-                    tooltip_html = tooltip_m + "</div>"
+                    tooltip_m += "</div>"
             tooltip_m += "</div>"
 
             html_annual += f"""
