@@ -603,7 +603,7 @@ with tab_calendar:
     with c_m:
         mes_sel = st.selectbox("Mes:", range(1, 13), index=now.month - 1, format_func=lambda x: MESES_ES[x-1])
     with c_y:
-        ano_sel = st.number_input("Año:", min_value=2024, max_value=2030, value=now.year)
+        ano_sel = st.number_input("Año Mensual:", min_value=2024, max_value=2030, value=now.year, key="ano_mensual_sel")
         
     daily_stats = {}
     if not df_ops_trading.empty:
@@ -682,6 +682,10 @@ with tab_calendar:
             pointer-events: none;
             text-align: left;
         }
+        .day-tooltip.tooltip-down {
+            bottom: auto !important;
+            top: 105% !important;
+        }
         .day-box:hover .day-tooltip {
             visibility: visible;
             opacity: 1;
@@ -740,7 +744,8 @@ with tab_calendar:
                         pnl_fmt = "$0.00"
                         meta_str = f"{tr} ops"
                     
-                    tooltip_html = "<div class='day-tooltip'>"
+                    tooltip_pos_cls = "tooltip-down" if w_idx == 1 else ""
+                    tooltip_html = f"<div class='day-tooltip {tooltip_pos_cls}'>"
                     tooltip_html += f"<div class='tooltip-title'>📊 {fecha_obj.strftime('%d %b %Y')}</div>"
                     for acc_info in st_day.get('accounts', []):
                         pnl_acc = acc_info['pnl']
@@ -774,14 +779,19 @@ with tab_calendar:
     mc4.metric("Días Rojos (Loss)", f"{dias_perdedores} días")
 
     # =========================================================================
-    # SECCIÓN NUEVA: CALENDARIO ANUAL (MES A MES)
+    # SECCIÓN ANUAL MES A MES CON METRICAS ANUALES
     # =========================================================================
     st.markdown("<br>", unsafe_allow_html=True)
     st.divider()
-    st.subheader(f"🗓️ Resumen Anual — Año {int(ano_sel)}")
-    st.caption("Evolución mensual consolidada según las cuentas seleccionadas.")
+    
+    col_a_hdr1, col_a_hdr2 = st.columns([3, 1])
+    with col_a_hdr1:
+        st.subheader("🗓️ Resumen Anual — Calendario Mes a Mes")
+        st.caption("Evolución mensual consolidada según las cuentas seleccionadas.")
+    with col_a_hdr2:
+        ano_sel_annual = st.number_input("Año Resumen Anual:", min_value=2024, max_value=2030, value=now.year, key="ano_annual_sel")
 
-    df_ano = df_ops_trading[df_ops_trading['fecha_dt'].dt.year == ano_sel] if not df_ops_trading.empty else pd.DataFrame()
+    df_ano = df_ops_trading[df_ops_trading['fecha_dt'].dt.year == ano_sel_annual] if not df_ops_trading.empty else pd.DataFrame()
     
     css_annual = """
     <style>
@@ -838,6 +848,12 @@ with tab_calendar:
             pointer-events: none;
             text-align: left;
         }
+        /* CORRECCIÓN PARA MESES SUPERIORES (FILA 1) */
+        .month-tooltip.tooltip-down {
+            bottom: auto !important;
+            top: 105% !important;
+        }
+
         .month-card:hover .month-tooltip {
             visibility: visible;
             opacity: 1;
@@ -851,6 +867,10 @@ with tab_calendar:
 
     html_annual = f"{css_annual}<div class='annual-container'><div class='annual-grid'>"
 
+    total_pnl_ano = 0.0
+    meses_ganadores = 0
+    meses_perdedores = 0
+
     for m in range(1, 13):
         m_name = MESES_ES[m-1]
         
@@ -863,6 +883,8 @@ with tab_calendar:
             pnl_m = df_m_ops['resultado'].sum()
             tr_m = len(df_m_ops)
             pct_m = (pnl_m / tot_inicial * 100) if tot_inicial > 0 else 0.0
+            
+            total_pnl_ano += pnl_m
 
             df_diario_m = obtener_df_diario_clasificado(df_m_ops, cuentas_raw)
             if not df_diario_m.empty:
@@ -888,10 +910,12 @@ with tab_calendar:
                 card_cls = "win-month"
                 pct_cls = "green"
                 pnl_fmt = f"+${pnl_m:,.2f}"
+                meses_ganadores += 1
             elif pnl_m < -0.01:
                 card_cls = "loss-month"
                 pct_cls = "red"
                 pnl_fmt = f"-${abs(pnl_m):,.2f}"
+                meses_perdedores += 1
             else:
                 card_cls = ""
                 pct_cls = "neutral"
@@ -899,9 +923,12 @@ with tab_calendar:
 
             meta_str = f"{dias_op} días op. | <span class='green-meta'>{w_days}W</span> - <span class='red-meta'>{l_days}L</span>"
 
+            # SI EL MES ES DE LA PRIMERA FILA (1 A 4), EL TOOLTIP SE DESPLIEGA HACIA ABAJO
+            tooltip_pos_cls = "tooltip-down" if m <= 4 else ""
+
             # Tooltip de hover
-            tooltip_m = "<div class='month-tooltip'>"
-            tooltip_m += f"<div class='tooltip-title'>📊 {m_name} {int(ano_sel)}</div>"
+            tooltip_m = f"<div class='month-tooltip {tooltip_pos_cls}'>"
+            tooltip_m += f"<div class='tooltip-title'>📊 {m_name} {int(ano_sel_annual)}</div>"
             for acc_i in acc_m_breakdown:
                 p_acc = acc_i['pnl']
                 t_acc = acc_i['trades']
@@ -941,7 +968,16 @@ with tab_calendar:
 
     html_annual += "</div></div>"
     
-    st.components.v1.html(html_annual, height=420, scrolling=True)
+    st.components.v1.html(html_annual, height=480, scrolling=True)
+
+    # MÉTRICAS DEL AÑO SELECCIONADO
+    pct_ano = (total_pnl_ano / tot_inicial * 100) if tot_inicial > 0 else 0.0
+
+    mc_a1, mc_a2, mc_a3, mc_a4 = st.columns(4)
+    mc_a1.metric("PnL Total del Año", f"${total_pnl_ano:,.2f}", delta=f"{pct_ano:+.2f}%")
+    mc_a2.metric("% Rendimiento Año", f"{pct_ano:+.2f}%")
+    mc_a3.metric("Meses Verdes (Win)", f"{meses_ganadores} meses")
+    mc_a4.metric("Meses Rojos (Loss)", f"{meses_perdedores} meses")
 
 # =============================================================================
 # TAB 2: GRÁFICOS Y ANALYTICS
