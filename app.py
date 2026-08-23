@@ -153,7 +153,7 @@ st.markdown("""
 
 
 # -----------------------------------------------------------------------------
-# 2. CONEXIÓN A SUPABASE Y FUNCIONES AUXILIARES
+# 2. CONEXIÓN A SUPABASE Y FUNCIONES AUXILIARES OPTIMIZADAS
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def init_supabase():
@@ -181,6 +181,7 @@ def obtener_tarifa_por_lote(nombre_cuenta):
         return 4.0
     return 4.0
 
+@st.cache_data
 def process_raw_operations(ops_list):
     if not ops_list:
         return []
@@ -254,7 +255,8 @@ def process_raw_operations(ops_list):
         
     return processed_ops
 
-@st.cache_data(ttl=3)
+# AUMENTADO DE TTL=3 A TTL=300 (5 MINUTOS DE RETENCIÓN EN RAM)
+@st.cache_data(ttl=300)
 def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
     res_ops = supabase.table("operaciones").select("*").order("fecha", desc=True).execute()
@@ -289,6 +291,7 @@ def update_op_capturas(op_row, new_capturas_list):
         fecha_val = op_row.get("fecha")
         return supabase.table("operaciones").update({"capturas": json_str}).eq("account_number", acc_num).eq("fecha", fecha_val).execute()
 
+@st.cache_data
 def obtener_df_diario_clasificado(df_input, cuentas_lista):
     if df_input.empty:
         return pd.DataFrame()
@@ -800,7 +803,6 @@ with tab_calendar:
                             <span class='tooltip-acc-val' style='color:#FFFFFF; font-weight:800;'>{sign_str}${pnl_acc:,.2f}</span>
                         </div>
                         """
-                        # MOSTRAR DESGLOSE POR SÍMBOLO SI EL TOGGLE ESTÁ ACTIVO
                         if mostrar_simbolos_cal and acc_info.get('symbols'):
                             tooltip_html += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
                             for s_info in acc_info['symbols']:
@@ -1012,7 +1014,6 @@ with tab_calendar:
                     <span class='tooltip-acc-val' style='color:#FFFFFF; font-weight:800;'>{s_str}${p_acc:,.2f}</span>
                 </div>
                 """
-                # MOSTRAR DESGLOSE POR SÍMBOLO SI EL TOGGLE ESTÁ ACTIVO
                 if mostrar_simbolos_cal and acc_i.get('symbols'):
                     tooltip_m += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
                     for s_info in acc_i['symbols']:
