@@ -762,10 +762,9 @@ st.markdown("<br>", unsafe_allow_html=True)
 # -----------------------------------------------------------------------------
 # 5. PESTAÑAS PRINCIPALES DEL DASHBOARD
 # -----------------------------------------------------------------------------
-tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
+tab_calendar, tab_estado_analytics, tab_trades = st.tabs([
     "📅 Calendario de Resultados",
-    "📊 Gráficos & Analytics",
-    "🛡️ Estado de Cuentas",
+    "🛡️ Estado & Analytics",
     "📖 Historial de Operaciones"
 ])
 
@@ -1240,345 +1239,364 @@ with tab_calendar:
     mc_a4.metric("Meses Rojos (Loss)", f"{meses_perdedores} meses")
 
 # =============================================================================
-# TAB 2: GRÁFICOS Y ANALYTICS
+# TAB 2: ESTADO DE CUENTAS & ANALYTICS (UNIFICADO)
 # =============================================================================
-with tab_analytics:
-    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-chart-column' style='color:var(--blue-accent); margin-right:6px;'></i> Analytics y Curva de Balance por Cuenta</h3>", unsafe_allow_html=True)
+with tab_estado_analytics:
+    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-layer-group' style='color:var(--blue-accent); margin-right:6px;'></i> Estado de Cuentas, Monitoreo & Analytics</h3>", unsafe_allow_html=True)
     
     if df_ops_trading.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        st.markdown("#### 📈 Rendimiento Consolidado Global")
-        
-        filtro_periodo_global = st.radio(
-            "📅 Rango Temporal Global:",
-            options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
-            index=4,
-            horizontal=True,
-            key="analytics_global_period_filter"
-        )
-        
-        hoy = datetime.date.today()
-        if filtro_periodo_global == "Último mes":
-            fecha_lim_g = hoy - datetime.timedelta(days=30)
-        elif filtro_periodo_global == "Últimos 3 meses":
-            fecha_lim_g = hoy - datetime.timedelta(days=90)
-        elif filtro_periodo_global == "Últimos 6 meses":
-            fecha_lim_g = hoy - datetime.timedelta(days=180)
-        elif filtro_periodo_global == "Último año":
-            fecha_lim_g = hoy - datetime.timedelta(days=365)
-        else:
-            fecha_lim_g = None
-
-        df_global_filtered = df_ops_trading.copy()
-        if fecha_lim_g:
-            df_global_filtered = df_global_filtered[df_global_filtered['fecha_dia'] >= fecha_lim_g]
-
-        if df_global_filtered.empty:
-            st.warning("⚠️ No se encontraron operaciones en el periodo global seleccionado.")
-        else:
-            df_ops_sorted = df_global_filtered.sort_values("fecha_dt").copy()
-            df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
+        # 1. RENDIMIENTO GLOBAL (Oculto por defecto en un toggle)
+        if st.toggle("🌍 Mostrar Rendimiento Consolidado Global (Todas las Cuentas)", key="tgl_global_analytics"):
+            filtro_periodo_global = st.radio(
+                "📅 Rango Temporal Global:",
+                options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
+                index=4,
+                horizontal=True,
+                key="analytics_global_period_filter"
+            )
             
-            tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
-            df_ops_sorted["balance_cum"] = tot_inicial + df_ops_sorted["cum_pnl"]
-
-            df_diario_g = obtener_df_diario_clasificado(df_global_filtered, cuentas_raw)
-            if not df_diario_g.empty:
-                wins_g = len(df_diario_g[df_diario_g['clasificacion'] == 'WIN'])
-                losses_g = len(df_diario_g[df_diario_g['clasificacion'] == 'LOSS'])
-                be_g = len(df_diario_g[df_diario_g['clasificacion'] == 'BE'])
+            hoy = datetime.date.today()
+            if filtro_periodo_global == "Último mes":
+                fecha_lim_g = hoy - datetime.timedelta(days=30)
+            elif filtro_periodo_global == "Últimos 3 meses":
+                fecha_lim_g = hoy - datetime.timedelta(days=90)
+            elif filtro_periodo_global == "Últimos 6 meses":
+                fecha_lim_g = hoy - datetime.timedelta(days=180)
+            elif filtro_periodo_global == "Último año":
+                fecha_lim_g = hoy - datetime.timedelta(days=365)
             else:
-                wins_g, losses_g, be_g = 0, 0, 0
+                fecha_lim_g = None
 
-            min_bg = df_ops_sorted["balance_cum"].min()
-            max_bg = df_ops_sorted["balance_cum"].max()
-            diff_bg = max_bg - min_bg
-            padding_g = max(diff_bg * 0.15, 100.0)
-            y_range_g = [min_bg - padding_g, max_bg + padding_g]
+            df_global_filtered = df_ops_trading.copy()
+            if fecha_lim_g:
+                df_global_filtered = df_global_filtered[df_global_filtered['fecha_dia'] >= fecha_lim_g]
 
-            col_g1, col_g2 = st.columns([2, 1])
+            if df_global_filtered.empty:
+                st.warning("⚠️ No se encontraron operaciones en el periodo global seleccionado.")
+            else:
+                df_ops_sorted = df_global_filtered.sort_values("fecha_dt").copy()
+                df_ops_sorted["cum_pnl"] = df_ops_sorted["resultado"].cumsum()
+                
+                tot_inicial_g = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
+                df_ops_sorted["balance_cum"] = tot_inicial_g + df_ops_sorted["cum_pnl"]
 
-            with col_g1:
-                fig_balance = go.Figure()
-                fig_balance.add_trace(go.Scatter(
-                    x=df_ops_sorted["fecha_dt"],
-                    y=df_ops_sorted["balance_cum"],
-                    mode='lines',
-                    name='Balance Consolidado',
-                    line=dict(color='#2962FF', width=3),
-                    fill='tozeroy',
-                    fillcolor='rgba(41, 98, 255, 0.1)',
-                    hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
-                ))
+                df_diario_g = obtener_df_diario_clasificado(df_global_filtered, cuentas_raw)
+                if not df_diario_g.empty:
+                    wins_g = len(df_diario_g[df_diario_g['clasificacion'] == 'WIN'])
+                    losses_g = len(df_diario_g[df_diario_g['clasificacion'] == 'LOSS'])
+                    be_g = len(df_diario_g[df_diario_g['clasificacion'] == 'BE'])
+                else:
+                    wins_g, losses_g, be_g = 0, 0, 0
 
-                fig_balance.update_layout(
-                    title=f'<b>Evolución de la Curva de Balance Consolidada ($)</b>',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='#E2E8F0', family='Inter'),
-                    xaxis=dict(gridcolor='#1E293B', showgrid=True),
-                    yaxis=dict(gridcolor='#1E293B', showgrid=True, range=y_range_g),
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    height=380
-                )
-                st.plotly_chart(fig_balance, use_container_width=True)
+                min_bg = df_ops_sorted["balance_cum"].min()
+                max_bg = df_ops_sorted["balance_cum"].max()
+                diff_bg = max_bg - min_bg
+                padding_g = max(diff_bg * 0.15, 100.0)
+                y_range_g = [min_bg - padding_g, max_bg + padding_g]
 
-            with col_g2:
-                fig_donut = go.Figure(data=[go.Pie(
-                    labels=['Wins', 'Losses', 'BE'],
-                    values=[wins_g, losses_g, be_g],
-                    hole=.65,
-                    marker=dict(colors=['#10B981', '#F43F5E', '#64748B'], line=dict(color='#0B0E14', width=2))
-                )])
-                fig_donut.update_layout(
-                    title='<b>Distribución Win / Loss Global</b>',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='#E2E8F0', family='Inter'),
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    height=380,
-                    showlegend=True,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
-                )
-                st.plotly_chart(fig_donut, use_container_width=True)
+                col_g1, col_g2 = st.columns([2, 1])
+
+                with col_g1:
+                    fig_balance = go.Figure()
+                    fig_balance.add_trace(go.Scatter(
+                        x=df_ops_sorted["fecha_dt"],
+                        y=df_ops_sorted["balance_cum"],
+                        mode='lines',
+                        name='Balance Consolidado',
+                        line=dict(color='#2962FF', width=3),
+                        fill='tozeroy',
+                        fillcolor='rgba(41, 98, 255, 0.1)',
+                        hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
+                    ))
+                    fig_balance.update_layout(
+                        title=f'<b>Evolución de la Curva de Balance Consolidada ($)</b>',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#E2E8F0', family='Inter'),
+                        xaxis=dict(gridcolor='#1E293B', showgrid=True),
+                        yaxis=dict(gridcolor='#1E293B', showgrid=True, range=y_range_g),
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        height=380
+                    )
+                    st.plotly_chart(fig_balance, use_container_width=True)
+
+                with col_g2:
+                    fig_donut = go.Figure(data=[go.Pie(
+                        labels=['Wins', 'Losses', 'BE'],
+                        values=[wins_g, losses_g, be_g],
+                        hole=.65,
+                        marker=dict(colors=['#10B981', '#F43F5E', '#64748B'], line=dict(color='#0B0E14', width=2))
+                    )])
+                    fig_donut.update_layout(
+                        title='<b>Distribución Win / Loss Global</b>',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#E2E8F0', family='Inter'),
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        height=380,
+                        showlegend=True,
+                        legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
+                    )
+                    st.plotly_chart(fig_donut, use_container_width=True)
 
         st.divider()
-        st.markdown("#### 🏢 Curva de Balance & Distribución por Cuenta Individual")
-        
-        for c_acc in cuentas:
-            acc_num_str = str(c_acc["account_number"])
-            acc_name = c_acc["nombre_cuenta"]
-            acc_ini_bal = float(c_acc.get("balance_inicial", 100000.0))
-            
-            with st.expander(f"🔹 **{acc_name}** (`#{acc_num_str}`) — Curva de Balance & Win/Loss", expanded=True):
-                acc_period_filter = st.radio(
-                    f"📅 Rango Temporal para {acc_name}:",
-                    options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
-                    index=4,
-                    horizontal=True,
-                    key=f"period_filter_acc_{acc_num_str}"
-                )
 
-                if acc_period_filter == "Último mes":
-                    fecha_lim_acc = hoy - datetime.timedelta(days=30)
-                elif acc_period_filter == "Últimos 3 meses":
-                    fecha_lim_acc = hoy - datetime.timedelta(days=90)
-                elif acc_period_filter == "Últimos 6 meses":
-                    fecha_lim_acc = hoy - datetime.timedelta(days=180)
-                elif acc_period_filter == "Último año":
-                    fecha_lim_acc = hoy - datetime.timedelta(days=365)
-                else:
-                    fecha_lim_acc = None
-
-                df_acc_full = df_ops_trading[df_ops_trading["account_number"].astype(str) == acc_num_str].sort_values("fecha_dt").copy()
-
-                if fecha_lim_acc:
-                    df_acc = df_acc_full[df_acc_full['fecha_dia'] >= fecha_lim_acc].copy()
-                else:
-                    df_acc = df_acc_full.copy()
-
-                if df_acc.empty:
-                    st.info("Sin operaciones registradas para esta cuenta en el periodo seleccionado.")
-                else:
-                    df_acc["cum_pnl"] = df_acc["resultado"].cumsum()
-                    df_acc["balance_cum"] = acc_ini_bal + df_acc["cum_pnl"]
-
-                    df_diario_acc = obtener_df_diario_clasificado(df_acc, cuentas_raw)
-                    if not df_diario_acc.empty:
-                        w_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'WIN'])
-                        l_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'LOSS'])
-                        be_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'BE'])
-                    else:
-                        w_acc, l_acc, be_acc = 0, 0, 0
-
-                    min_ba = df_acc["balance_cum"].min()
-                    max_ba = df_acc["balance_cum"].max()
-                    diff_ba = max_ba - min_ba
-                    padding_a = max(diff_ba * 0.15, 50.0)
-                    y_range_a = [min_ba - padding_a, max_ba + padding_a]
-
-                    c_acc_1, c_acc_2 = st.columns([2, 1])
-
-                    with c_acc_1:
-                        fig_acc_bal = go.Figure()
-                        fig_acc_bal.add_trace(go.Scatter(
-                            x=df_acc["fecha_dt"],
-                            y=df_acc["balance_cum"],
-                            mode='lines',
-                            name=f'Balance #{acc_num_str}',
-                            line=dict(color='#2962FF', width=2.5),
-                            fill='tozeroy',
-                            fillcolor='rgba(41, 98, 255, 0.1)',
-                            hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
-                        ))
-                        fig_acc_bal.update_layout(
-                            title=f'<b>Curva de Balance — {acc_name} (#{acc_num_str})</b>',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='#E2E8F0', family='Inter'),
-                            xaxis=dict(gridcolor='#1E293B', showgrid=True),
-                            yaxis=dict(gridcolor='#1E293B', showgrid=True, range=y_range_a),
-                            margin=dict(l=20, r=20, t=40, b=20),
-                            height=300
-                        )
-                        st.plotly_chart(fig_acc_bal, use_container_width=True)
-
-                    with c_acc_2:
-                        fig_acc_donut = go.Figure(data=[go.Pie(
-                            labels=['Wins', 'Losses', 'BE'],
-                            values=[w_acc, l_acc, be_acc],
-                            hole=.65,
-                            marker=dict(colors=['#10B981', '#F43F5E', '#64748B'], line=dict(color='#161D2E', width=2))
-                        )])
-                        fig_acc_donut.update_layout(
-                            title=f'<b>Win/Loss — {acc_name}</b>',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='#E2E8F0', family='Inter'),
-                            margin=dict(l=20, r=20, t=40, b=20),
-                            height=300,
-                            showlegend=True,
-                            legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
-                        )
-                        st.plotly_chart(fig_acc_donut, use_container_width=True)
-
-# =============================================================================
-# TAB 3: ESTADO DE CUENTAS
-# =============================================================================
-with tab_cuentas:
-    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-wallet' style='color:var(--blue-accent); margin-right:6px;'></i> Monitoreo de Reglas y Drawdown por Cuenta</h3>", unsafe_allow_html=True)
-    
-    if not cuentas:
-        st.info("No hay cuentas seleccionadas.")
-    else:
-        for c in cuentas:
-            acc_num_str = str(c["account_number"])
+        # 2. LÓGICA DE ORDENAMIENTO (Fondeada+ > Challenge+ > Fondeada- > Challenge-)
+        def obtener_llave_orden(c):
             bal_ini = float(c.get("balance_inicial", 0.0))
             bal_act = float(c.get("balance", 0.0))
-            equidad = float(c.get("equidad", 0.0))
             ganancia = bal_act - bal_ini
-            pct_ganancia = (ganancia / bal_ini * 100) if bal_ini > 0 else 0
+            estado_t = str(c.get("estado", "Fase 1")).lower()
+            es_fondeada = ("fondeada" in estado_t or "funded" in estado_t)
             
-            p_max = float(c.get("perdida_diaria_max", 0.0))
-            p_act = float(c.get("perdida_diaria_actual", 0.0))
-            margen_max = p_max - p_act
-            
-            estado_tag = str(c.get("estado", "Fase 1"))
-            es_fondeada = ("fondeada" in estado_tag.lower() or "funded" in estado_tag.lower())
-            
-            with st.expander(f"🔹 {c['nombre_cuenta'].upper()} | ID #{acc_num_str} — [{estado_tag.upper()}]", expanded=True):
+            if es_fondeada and ganancia > 0:
+                grupo = 1
+            elif not es_fondeada and ganancia > 0:
+                grupo = 2
+            elif es_fondeada and ganancia <= 0:
+                grupo = 3
+            else:
+                grupo = 4
                 
-                st.markdown(f"""
-                <div style="background-color: var(--bg-sec); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="font-size: 20px; font-weight: 800; color: #FFFFFF; font-family: 'Inter', sans-serif;">{c['nombre_cuenta']}</span>
-                        <span style="font-size: 13px; color: var(--text-muted); margin-left: 12px; font-weight: 600; font-family:'JetBrains Mono', monospace;">ID #{acc_num_str}</span>
-                    </div>
-                    <div>
-                        <span style="background-color: var(--primary-color); color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            # Retornamos el grupo, y el negativo de la ganancia para ordenar de mayor a menor profit dentro del grupo
+            return (grupo, -ganancia)
 
-                col_c1, col_c2, col_c3 = st.columns(3)
+        cuentas_ordenadas = sorted(cuentas, key=obtener_llave_orden) if cuentas else []
+
+        # 3. RENDERIZADO DE CUENTAS INDIVIDUALES
+        if not cuentas_ordenadas:
+            st.info("No hay cuentas seleccionadas.")
+        else:
+            for c in cuentas_ordenadas:
+                acc_num_str = str(c["account_number"])
+                acc_name = c["nombre_cuenta"]
+                bal_ini = float(c.get("balance_inicial", 0.0))
+                bal_act = float(c.get("balance", 0.0))
+                equidad = float(c.get("equidad", 0.0))
+                ganancia = bal_act - bal_ini
+                pct_ganancia = (ganancia / bal_ini * 100) if bal_ini > 0 else 0
                 
-                delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
-                col_c1.metric("Balance Actual", f"${bal_act:,.2f}", delta=delta_bal)
-                col_c1.caption(f"Equidad actual: ${equidad:,.2f}")
+                p_max = float(c.get("perdida_diaria_max", 0.0))
+                p_act = float(c.get("perdida_diaria_actual", 0.0))
+                margen_max = p_max - p_act
                 
-                delta_loss = f"-${p_act:,.2f}" if p_act > 0 else "Sin pérdidas"
-                col_c2.metric("Margen Pérdida Máxima", f"${margen_max:,.2f}", delta=delta_loss, delta_color="normal" if p_act > 0 else "off")
-                col_c2.caption(f"Límite máximo total: ${p_max:,.2f}")
+                estado_tag = str(c.get("estado", "Fase 1"))
+                es_fondeada = ("fondeada" in estado_tag.lower() or "funded" in estado_tag.lower())
                 
-                if not es_fondeada:
-                    obj = float(c.get("objetivo_profit", 0.0))
-                    pct_prog = min(max(ganancia / obj, 0.0), 1.0) if obj > 0 else 1.0
-                    delta_obj = f"{ganancia:+,.2f} de {obj:,.2f}"
-                    col_c3.metric("Objetivo Profit Target", f"${obj:,.2f}", delta=delta_obj)
-                else:
-                    delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
-                    col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
-                
-                if ganancia < 0:
-                    str_ganancia = f"<span class='color-loss'>-${abs(ganancia):,.2f}</span>"
-                elif ganancia > 0:
-                    str_ganancia = f"<span class='color-win'>+${ganancia:,.2f}</span>"
-                else:
-                    str_ganancia = "$0.00"
+                with st.expander(f"🔹 {acc_name.upper()} | ID #{acc_num_str} — [{estado_tag.upper()}] | Profit: ${ganancia:,.2f}", expanded=True):
                     
-                str_obj = f"${c.get('objetivo_profit', 0):,.2f}"
-                
-                if not es_fondeada:
-                    obj = float(c.get("objetivo_profit", 0.0))
-                    pct_p_val = min(max(pct_prog * 100, 0.0), 100.0)
-                    st.write("**Progreso hacia el Objetivo (Phase Pass):**")
+                    st.markdown(f"""
+                    <div style="background-color: var(--bg-sec); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-size: 20px; font-weight: 800; color: #FFFFFF; font-family: 'Inter', sans-serif;">{acc_name}</span>
+                            <span style="font-size: 13px; color: var(--text-muted); margin-left: 12px; font-weight: 600; font-family:'JetBrains Mono', monospace;">ID #{acc_num_str}</span>
+                        </div>
+                        <div>
+                            <span style="background-color: var(--primary-color); color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # KPI de Balance
+                    col_c1, col_c2, col_c3 = st.columns(3)
+                    
+                    delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
+                    col_c1.metric("Balance Actual", f"${bal_act:,.2f}", delta=delta_bal)
+                    col_c1.caption(f"Equidad actual: ${equidad:,.2f}")
+                    
+                    delta_loss = f"-${p_act:,.2f}" if p_act > 0 else "Sin pérdidas"
+                    col_c2.metric("Margen Pérdida Máxima", f"${margen_max:,.2f}", delta=delta_loss, delta_color="normal" if p_act > 0 else "off")
+                    col_c2.caption(f"Límite máximo total: ${p_max:,.2f}")
+                    
+                    if not es_fondeada:
+                        obj = float(c.get("objetivo_profit", 0.0))
+                        pct_prog = min(max(ganancia / obj, 0.0), 1.0) if obj > 0 else 1.0
+                        delta_obj = f"{ganancia:+,.2f} de {obj:,.2f}"
+                        col_c3.metric("Objetivo Profit Target", f"${obj:,.2f}", delta=delta_obj)
+                    else:
+                        delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
+                        col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
+                    
+                    # Barras de Progreso
+                    if ganancia < 0:
+                        str_ganancia = f"<span class='color-loss'>-${abs(ganancia):,.2f}</span>"
+                    elif ganancia > 0:
+                        str_ganancia = f"<span class='color-win'>+${ganancia:,.2f}</span>"
+                    else:
+                        str_ganancia = "$0.00"
+                        
+                    str_obj = f"${c.get('objetivo_profit', 0):,.2f}"
+                    
+                    if not es_fondeada:
+                        pct_p_val = min(max(pct_prog * 100, 0.0), 100.0)
+                        st.write("**Progreso hacia el Objetivo (Phase Pass):**")
+                        st.markdown(f"""
+                        <div style="background-color: var(--bg-sec); border: 1px solid var(--border-main); border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
+                            <div style="background-color: var(--win-color); width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; margin-bottom: 12px; font-family:'JetBrains Mono', monospace;">{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})</div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.caption("🟢 Cuenta Fondeada activa.")
+                    
+                    if p_act > 0:
+                        str_p_act = f"<span class='color-loss'>-${p_act:,.2f}</span>"
+                    else:
+                        str_p_act = f"<span class='color-win'>$0.00</span>"
+                        
+                    str_p_max = f"${p_max:,.2f}"
+                    pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
+                    pct_d_val = min(max(pct_drawdown * 100, 0.0), 100.0)
+                    
+                    st.write("**Límite de Pérdida Máxima Consumido:**")
                     st.markdown(f"""
                     <div style="background-color: var(--bg-sec); border: 1px solid var(--border-main); border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
-                        <div style="background-color: var(--win-color); width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                        <div style="background-color: var(--loss-color); width: {pct_d_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
                     </div>
-                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; margin-bottom: 12px; font-family:'JetBrains Mono', monospace;">{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; margin-bottom: 16px; font-family:'JetBrains Mono', monospace;">{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})</div>
                     """, unsafe_allow_html=True)
-                else:
-                    st.caption("🟢 Cuenta Fondeada activa.")
-                
-                if p_act > 0:
-                    str_p_act = f"<span class='color-loss'>-${p_act:,.2f}</span>"
-                else:
-                    str_p_act = f"<span class='color-win'>$0.00</span>"
+
+                    # ---------------------------------------------------------
+                    # SECCIÓN COLAPSABLE: GRÁFICOS Y ANALYTICS
+                    # ---------------------------------------------------------
+                    st.markdown("<hr style='border-color: var(--border-light); margin: 8px 0;'>", unsafe_allow_html=True)
                     
-                str_p_max = f"${p_max:,.2f}"
-                pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
-                pct_d_val = min(max(pct_drawdown * 100, 0.0), 100.0)
-                
-                st.write("**Límite de Pérdida Máxima Consumido:**")
-                st.markdown(f"""
-                <div style="background-color: var(--bg-sec); border: 1px solid var(--border-main); border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
-                    <div style="background-color: var(--loss-color); width: {pct_d_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
-                </div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; font-family:'JetBrains Mono', monospace;">{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})</div>
-                """, unsafe_allow_html=True)
+                    if st.toggle(f"📊 Ver Gráficos y Analytics", key=f"tgl_charts_{acc_num_str}"):
+                        acc_period_filter = st.radio(
+                            f"📅 Rango Temporal:",
+                            options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
+                            index=4,
+                            horizontal=True,
+                            key=f"period_filter_acc_{acc_num_str}"
+                        )
 
-                if es_fondeada:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    with st.expander("💸 Historial de Retiros & Profit Split (80%)", expanded=False):
-                        ops_acc = [
-                            op for op in ops_raw 
-                            if str(op.get("account_number")) == acc_num_str and str(op.get("tipo", "")).upper() == "WITHDRAWAL"
-                        ]
-                        
-                        if not ops_acc:
-                            st.info("Sin retiros registrados en MetaTrader 5 para esta cuenta.")
+                        hoy = datetime.date.today()
+                        if acc_period_filter == "Último mes":
+                            fecha_lim_acc = hoy - datetime.timedelta(days=30)
+                        elif acc_period_filter == "Últimos 3 meses":
+                            fecha_lim_acc = hoy - datetime.timedelta(days=90)
+                        elif acc_period_filter == "Últimos 6 meses":
+                            fecha_lim_acc = hoy - datetime.timedelta(days=180)
+                        elif acc_period_filter == "Último año":
+                            fecha_lim_acc = hoy - datetime.timedelta(days=365)
                         else:
-                            tot_bruto_retirado = sum([abs(float(op.get("resultado", 0))) for op in ops_acc])
-                            tot_neto_trader = tot_bruto_retirado * 0.80
-                            
-                            r_c1, r_c2 = st.columns(2)
-                            r_c1.metric("Total Retirado (Bruto MT5)", f"${tot_bruto_retirado:,.2f}")
-                            r_c2.metric("Retiro Neto Trader (Split 80%)", f"${tot_neto_trader:,.2f}", delta="80% a tu favor", delta_color="normal")
-                            
-                            st.markdown("---")
-                            st.markdown("##### 📜 Desglose de Payouts:")
-                            
-                            df_ret = pd.DataFrame(ops_acc)
-                            df_ret["bruto"] = df_ret["resultado"].apply(lambda x: abs(float(x)))
-                            df_ret["neto_80"] = df_ret["bruto"] * 0.80
-                            df_ret["fecha_clean"] = df_ret["fecha"].str.slice(0, 10)
-                            
-                            df_ret_show = df_ret[["fecha_clean", "bruto", "neto_80", "comentario"]].rename(columns={
-                                "fecha_clean": "Fecha",
-                                "bruto": "Monto Bruto ($)",
-                                "neto_80": "Neto Trader 80% ($)",
-                                "comentario": "Detalle / Referencia"
-                            })
-                            
-                            st.dataframe(
-                                df_ret_show.style.format({
-                                    "Monto Bruto ($)": "${:,.2f}",
-                                    "Neto Trader 80% ($)": "${:,.2f}"
-                                }),
-                                use_container_width=True,
-                                hide_index=True
-                            )
+                            fecha_lim_acc = None
 
+                        df_acc_full = df_ops_trading[df_ops_trading["account_number"].astype(str) == acc_num_str].sort_values("fecha_dt").copy()
+
+                        if fecha_lim_acc:
+                            df_acc = df_acc_full[df_acc_full['fecha_dia'] >= fecha_lim_acc].copy()
+                        else:
+                            df_acc = df_acc_full.copy()
+
+                        if df_acc.empty:
+                            st.info("Sin operaciones registradas para esta cuenta en el periodo seleccionado.")
+                        else:
+                            df_acc["cum_pnl"] = df_acc["resultado"].cumsum()
+                            df_acc["balance_cum"] = bal_ini + df_acc["cum_pnl"]
+
+                            df_diario_acc = obtener_df_diario_clasificado(df_acc, cuentas_raw)
+                            if not df_diario_acc.empty:
+                                w_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'WIN'])
+                                l_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'LOSS'])
+                                be_acc = len(df_diario_acc[df_diario_acc['clasificacion'] == 'BE'])
+                            else:
+                                w_acc, l_acc, be_acc = 0, 0, 0
+
+                            min_ba = df_acc["balance_cum"].min()
+                            max_ba = df_acc["balance_cum"].max()
+                            diff_ba = max_ba - min_ba
+                            padding_a = max(diff_ba * 0.15, 50.0)
+                            y_range_a = [min_ba - padding_a, max_ba + padding_a]
+
+                            c_acc_1, c_acc_2 = st.columns([2, 1])
+
+                            with c_acc_1:
+                                fig_acc_bal = go.Figure()
+                                fig_acc_bal.add_trace(go.Scatter(
+                                    x=df_acc["fecha_dt"],
+                                    y=df_acc["balance_cum"],
+                                    mode='lines',
+                                    name=f'Balance #{acc_num_str}',
+                                    line=dict(color='#2962FF', width=2.5),
+                                    fill='tozeroy',
+                                    fillcolor='rgba(41, 98, 255, 0.1)',
+                                    hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
+                                ))
+                                fig_acc_bal.update_layout(
+                                    title=f'<b>Curva de Balance — {acc_name}</b>',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    font=dict(color='#E2E8F0', family='Inter'),
+                                    xaxis=dict(gridcolor='#1E293B', showgrid=True),
+                                    yaxis=dict(gridcolor='#1E293B', showgrid=True, range=y_range_a),
+                                    margin=dict(l=20, r=20, t=40, b=20),
+                                    height=300
+                                )
+                                st.plotly_chart(fig_acc_bal, use_container_width=True)
+
+                            with c_acc_2:
+                                fig_acc_donut = go.Figure(data=[go.Pie(
+                                    labels=['Wins', 'Losses', 'BE'],
+                                    values=[w_acc, l_acc, be_acc],
+                                    hole=.65,
+                                    marker=dict(colors=['#10B981', '#F43F5E', '#64748B'], line=dict(color='#161D2E', width=2))
+                                )])
+                                fig_acc_donut.update_layout(
+                                    title=f'<b>Win/Loss (%)</b>',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    font=dict(color='#E2E8F0', family='Inter'),
+                                    margin=dict(l=20, r=20, t=40, b=20),
+                                    height=300,
+                                    showlegend=True,
+                                    legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
+                                )
+                                st.plotly_chart(fig_acc_donut, use_container_width=True)
+
+                    # ---------------------------------------------------------
+                    # SECCIÓN COLAPSABLE: RETIROS (Solo para Fondeadas)
+                    # ---------------------------------------------------------
+                    if es_fondeada:
+                        if st.toggle("💸 Historial de Retiros & Profit Split (80%)", key=f"tgl_ret_{acc_num_str}"):
+                            ops_acc = [
+                                op for op in ops_raw 
+                                if str(op.get("account_number")) == acc_num_str and str(op.get("tipo", "")).upper() == "WITHDRAWAL"
+                            ]
+                            
+                            if not ops_acc:
+                                st.info("Sin retiros registrados en MetaTrader 5 para esta cuenta.")
+                            else:
+                                tot_bruto_retirado = sum([abs(float(op.get("resultado", 0))) for op in ops_acc])
+                                tot_neto_trader = tot_bruto_retirado * 0.80
+                                
+                                r_c1, r_c2 = st.columns(2)
+                                r_c1.metric("Total Retirado (Bruto MT5)", f"${tot_bruto_retirado:,.2f}")
+                                r_c2.metric("Retiro Neto Trader (Split 80%)", f"${tot_neto_trader:,.2f}", delta="80% a tu favor", delta_color="normal")
+                                
+                                st.markdown("---")
+                                st.markdown("##### 📜 Desglose de Payouts:")
+                                
+                                df_ret = pd.DataFrame(ops_acc)
+                                df_ret["bruto"] = df_ret["resultado"].apply(lambda x: abs(float(x)))
+                                df_ret["neto_80"] = df_ret["bruto"] * 0.80
+                                df_ret["fecha_clean"] = df_ret["fecha"].str.slice(0, 10)
+                                
+                                df_ret_show = df_ret[["fecha_clean", "bruto", "neto_80", "comentario"]].rename(columns={
+                                    "fecha_clean": "Fecha",
+                                    "bruto": "Monto Bruto ($)",
+                                    "neto_80": "Neto Trader 80% ($)",
+                                    "comentario": "Detalle / Referencia"
+                                })
+                                
+                                st.dataframe(
+                                    df_ret_show.style.format({
+                                        "Monto Bruto ($)": "${:,.2f}",
+                                        "Neto Trader 80% ($)": "${:,.2f}"
+                                    }),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
