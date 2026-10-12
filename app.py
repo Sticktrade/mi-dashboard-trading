@@ -436,29 +436,40 @@ def modal_gestionar_estados(cuentas_raw_list):
             
         opciones = ["Challenge", "Funded", "Breached"]
         
-        col_txt, col_sel = st.columns([2, 1])
-        with col_txt:
-            st.markdown(f"<div style='margin-top:6px; font-weight:600;'>{acc_name} <code style='font-size:11px; margin-left:8px;'>#{acc_id}</code></div>", unsafe_allow_html=True)
-        with col_sel:
-            nuevo_estado = st.selectbox(
-                "Estado", 
-                options=opciones, 
-                index=idx, 
-                key=f"edit_est_{acc_id}",
-                label_visibility="collapsed"
-            )
+        # 1. ENVOLVEMOS LA FILA EN UN RECUADRO CON BORDE
+        with st.container(border=True):
             
-            # Si el usuario selecciona un estado diferente al que traía, lo guardamos en el diccionario
-            if nuevo_estado != opciones[idx]:
-                cambios[acc_id] = nuevo_estado
+            # 2. AJUSTAMOS LAS COLUMNAS PARA REDUCIR EL ESPACIO VACÍO
+            col_txt, col_sel = st.columns([3, 2]) 
+            
+            with col_txt:
+                # Mejoramos el diseño de la etiqueta para que se vea más profesional
+                st.markdown(f"""
+                <div style='margin-top:6px; font-size:15px; font-weight:600;'>
+                    {acc_name} 
+                    <code style='font-size:12px; margin-left:8px; color:var(--text-muted); background-color:var(--bg-main); padding:3px 6px; border-radius:6px; border: 1px solid var(--border-light);'>#{acc_id}</code>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col_sel:
+                nuevo_estado = st.selectbox(
+                    "Estado", 
+                    options=opciones, 
+                    index=idx, 
+                    key=f"edit_est_{acc_id}",
+                    label_visibility="collapsed"
+                )
+                
+                if nuevo_estado != opciones[idx]:
+                    cambios[acc_id] = nuevo_estado
                 
     st.markdown("<br>", unsafe_allow_html=True)
+    
     if st.button("💾 Guardar Cambios en Base de Datos", use_container_width=True):
         if cambios:
             with st.spinner("Actualizando base de datos..."):
                 try:
                     for a_id, n_est in cambios.items():
-                        # Actualizamos en Supabase
                         supabase.table("cuentas").update({"estado": n_est}).eq("account_number", a_id).execute()
                     st.success("¡Estados actualizados correctamente!")
                     st.cache_data.clear()
