@@ -412,7 +412,61 @@ def mostrar_modal_zoom(cap):
             st.markdown(f"**Notas técnicas:** {nota_txt}")
         else:
             st.caption("Sin notas técnicas registradas.")
-
+@st.dialog("⚙️ Gestionar Estado de Cuentas", width="large")
+def modal_gestionar_estados(cuentas_raw_list):
+    st.markdown("Si la automatización falló, puedes forzar el cambio de estado de tus cuentas manualmente aquí. **Esto actualizará tu base de datos en Supabase.**")
+    st.divider()
+    
+    cambios = {}
+    
+    # Crear una fila por cada cuenta
+    for c in cuentas_raw_list:
+        acc_id = str(c["account_number"])
+        acc_name = c.get("nombre_cuenta", "Cuenta")
+        est_actual = str(c.get("estado", "Challenge"))
+        
+        # Determinar el índice actual para el selectbox
+        est_lower = est_actual.lower()
+        if "breached" in est_lower or "quemada" in est_lower or "eliminada" in est_lower:
+            idx = 2
+        elif "fondeada" in est_lower or "funded" in est_lower:
+            idx = 1
+        else:
+            idx = 0
+            
+        opciones = ["Challenge", "Funded", "Breached"]
+        
+        col_txt, col_sel = st.columns([2, 1])
+        with col_txt:
+            st.markdown(f"<div style='margin-top:6px; font-weight:600;'>{acc_name} <code style='font-size:11px; margin-left:8px;'>#{acc_id}</code></div>", unsafe_allow_html=True)
+        with col_sel:
+            nuevo_estado = st.selectbox(
+                "Estado", 
+                options=opciones, 
+                index=idx, 
+                key=f"edit_est_{acc_id}",
+                label_visibility="collapsed"
+            )
+            
+            # Si el usuario selecciona un estado diferente al que traía, lo guardamos en el diccionario
+            if nuevo_estado != opciones[idx]:
+                cambios[acc_id] = nuevo_estado
+                
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("💾 Guardar Cambios en Base de Datos", use_container_width=True):
+        if cambios:
+            with st.spinner("Actualizando base de datos..."):
+                try:
+                    for a_id, n_est in cambios.items():
+                        # Actualizamos en Supabase
+                        supabase.table("cuentas").update({"estado": n_est}).eq("account_number", a_id).execute()
+                    st.success("¡Estados actualizados correctamente!")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al actualizar la base de datos: {e}")
+        else:
+            st.info("No realizaste ningún cambio.")
 # -----------------------------------------------------------------------------
 # 3. BARRA LATERAL / ORGANIZACIÓN DE CUENTAS
 # -----------------------------------------------------------------------------
@@ -433,6 +487,14 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("### <i class='fa-solid fa-sliders' style='color:#2962FF; margin-right:4px;'></i> Selección de Cuentas", unsafe_allow_html=True)
+
+# ---> NUEVO BOTÓN PARA ABRIR EL MODAL <---
+if st.sidebar.button("⚙️ Gestionar Estados", use_container_width=True):
+    if cuentas_raw:
+        modal_gestionar_estados(cuentas_raw)
+    else:
+        st.sidebar.warning("No hay cuentas cargadas.")
+# ------------------------------------------
 
 cuentas_funded = []
 cuentas_challenges = []
