@@ -355,6 +355,8 @@ def cargar_datos():
         
     return res_cuentas.data, todas_las_operaciones
 
+cuentas_raw, ops_raw = cargar_datos()
+
 def parse_capturas(capturas_data):
     if not capturas_data:
         return []
