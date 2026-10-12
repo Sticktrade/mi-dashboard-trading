@@ -762,6 +762,12 @@ with tab_calendar:
     
     css_cal = """
     <style>
+        :root {
+            --primary-color: #2962FF; --bg-main: #0B0E14; --bg-sec: #111622;
+            --bg-card: #161D2E; --border-main: #1E293B; --border-light: #2D384D;
+            --text-main: #E2E8F0; --text-muted: #94A3B8; --win-color: #10B981;
+            --loss-color: #F43F5E; --be-color: #64748B;
+        }
         body { margin:0; padding:0; background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }
         .tradelio-cal-container { background-color: var(--bg-main); border: 1px solid var(--border-light); border-radius: 12px; padding: 25px 15px 45px 15px; overflow: visible !important; }
         .tradelio-grid { display: grid; grid-template-columns: 130px repeat(7, 1fr); gap: 8px; overflow: visible !important; }
@@ -943,6 +949,12 @@ with tab_calendar:
     
     css_annual = """
     <style>
+        :root {
+            --primary-color: #2962FF; --bg-main: #0B0E14; --bg-sec: #111622;
+            --bg-card: #161D2E; --border-main: #1E293B; --border-light: #2D384D;
+            --text-main: #E2E8F0; --text-muted: #94A3B8; --win-color: #10B981;
+            --loss-color: #F43F5E; --be-color: #64748B;
+        }
         body { margin:0; padding:0; background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }
         .annual-container { background-color: var(--bg-main); border: 1px solid var(--border-light); border-radius: 12px; padding: 25px 15px 45px 15px; overflow: visible !important; }
         .annual-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; overflow: visible !important; }
@@ -1011,7 +1023,6 @@ with tab_calendar:
         .tooltip-acc-val { font-weight: 800; font-size: 11px; color: #FFFFFF !important; }
     </style>
     """
-
     html_annual = f"{css_annual}<div class='annual-container'><div class='annual-grid'>"
 
     total_pnl_ano = 0.0
