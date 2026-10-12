@@ -330,7 +330,7 @@ def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
     
     # Agregamos .limit(15000) para sobreescribir el límite de 1,000 filas por defecto de Supabase
-    res_ops = supabase.table("operaciones").select("*").limit(20000).order("fecha", desc=True).execute()
+    res_ops = supabase.table("operaciones").select("*").limit(50000).order("fecha", desc=True).execute()
     
     ops_data = res_ops.data
     if ops_data:
