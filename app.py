@@ -1685,7 +1685,7 @@ with tab_trades:
                         raw_prof = sum([float(op.get("raw_profit", 0)) for op in matching_ops])
                         
                         if tot_comm > 0 or tot_swap != 0:
-                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** \vert{} Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
+                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
                         else:
                             st.info("ℹ️ Registro de sesión sin comisiones aplicadas.")
                             
