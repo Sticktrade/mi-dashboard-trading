@@ -329,16 +329,31 @@ def process_raw_operations(ops_list):
 def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
     
-    # Agregamos .limit(15000) para sobreescribir el límite de 1,000 filas por defecto de Supabase
-    res_ops = supabase.table("operaciones").select("*").limit(50000).order("fecha", desc=True).execute()
+    # Paginación para saltar el límite de seguridad del servidor de Supabase
+    todas_las_operaciones = []
+    inicio = 0
+    paso = 1000
     
-    ops_data = res_ops.data
-    if ops_data:
-        ops_data = process_raw_operations(ops_data)
+    while True:
+        # Pedimos bloques de 1,000 en 1,000
+        res_ops = supabase.table("operaciones").select("*").order("fecha", desc=True).range(inicio, inicio + paso - 1).execute()
         
-    return res_cuentas.data, ops_data
-
-cuentas_raw, ops_raw = cargar_datos()
+        datos_bloque = res_ops.data
+        if not datos_bloque:
+            break
+            
+        todas_las_operaciones.extend(datos_bloque)
+        
+        # Si el bloque devuelto trae menos de 1000, significa que ya llegamos al final de la base de datos
+        if len(datos_bloque) < paso:
+            break
+            
+        inicio += paso
+        
+    if todas_las_operaciones:
+        todas_las_operaciones = process_raw_operations(todas_las_operaciones)
+        
+    return res_cuentas.data, todas_las_operaciones
 
 def parse_capturas(capturas_data):
     if not capturas_data:
