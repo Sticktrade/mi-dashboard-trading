@@ -1558,10 +1558,14 @@ with tab_estado_analytics:
                     # SECCIÓN COLAPSABLE: RETIROS (Solo para Fondeadas)
                     # ---------------------------------------------------------
                     if es_fondeada:
-                        if st.toggle("💸 Historial de Retiros & Profit Split (80%)", key=f"tgl_ret_{acc_num_str}"):
+                        # Usamos checkbox que está 100% adaptado a nuestro CSS
+                        if st.checkbox("💸 Ver Historial de Retiros & Profit Split (80%)", key=f"chk_ret_{acc_num_str}"):
+                            
+                            # Búsqueda más flexible (.strip() y 'in') para evitar errores por espacios en la DB
                             ops_acc = [
                                 op for op in ops_raw 
-                                if str(op.get("account_number")) == acc_num_str and str(op.get("tipo", "")).upper() == "WITHDRAWAL"
+                                if str(op.get("account_number")).strip() == acc_num_str.strip() 
+                                and "WITHDRAWAL" in str(op.get("tipo", "")).upper()
                             ]
                             
                             if not ops_acc:
@@ -1580,7 +1584,8 @@ with tab_estado_analytics:
                                 df_ret = pd.DataFrame(ops_acc)
                                 df_ret["bruto"] = df_ret["resultado"].apply(lambda x: abs(float(x)))
                                 df_ret["neto_80"] = df_ret["bruto"] * 0.80
-                                df_ret["fecha_clean"] = df_ret["fecha"].str.slice(0, 10)
+                                # Convertimos a string por seguridad antes de cortar la fecha
+                                df_ret["fecha_clean"] = df_ret["fecha"].astype(str).str.slice(0, 10) 
                                 
                                 df_ret_show = df_ret[["fecha_clean", "bruto", "neto_80", "comentario"]].rename(columns={
                                     "fecha_clean": "Fecha",
