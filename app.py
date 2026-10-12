@@ -10,7 +10,7 @@ import base64
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURACIÓN VISUAL (STICKTRADE)
+# 1. CONFIGURACIÓN VISUAL (STICKTRADE - DISEÑO INSTITUCIONAL)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="StickTrade",
@@ -19,109 +19,179 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Inyección de fuentes, iconos (FontAwesome) y CSS personalizado
 st.markdown("""
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
 <style>
     :root {
         --primary-color: #2962FF !important;
+        --bg-main: #0B0E14;
+        --bg-sec: #111622;
+        --bg-card: #161D2E;
+        --border-main: #1E293B;
+        --border-light: #2D384D;
+        --text-main: #E2E8F0;
+        --text-muted: #94A3B8;
+        
+        --win-color: #10B981;
+        --loss-color: #F43F5E;
+        --be-color: #64748B;
+        --blue-accent: #2962FF;
     }
 
+    /* Tipografía y Fondos Base */
     .stApp {
-        background-color: #12151C;
-        color: #E0E3EB;
+        background-color: var(--bg-main);
+        color: var(--text-main);
+        font-family: 'Inter', sans-serif;
     }
     
+    .font-mono {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+
+    /* TABS */
     button[data-baseweb="tab"] {
-        color: #787B86 !important;
+        color: var(--text-muted) !important;
         font-weight: 600 !important;
+        font-family: 'Inter', sans-serif;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
     }
     button[data-baseweb="tab"][aria-selected="true"] {
-        color: #2962FF !important;
+        color: var(--text-main) !important;
     }
     div[data-baseweb="tab-highlight"] {
-        background-color: #2962FF !important;
+        background-color: var(--primary-color) !important;
     }
     div[data-baseweb="tab-border"] {
-        background-color: #282D3C !important;
+        background-color: var(--border-main) !important;
     }
     
-    div[data-baseweb="checkbox"] {
+    /* CHECKBOXES Y RADIO BUTTONS */
+    div[data-baseweb="checkbox"], div[data-baseweb="radio"] {
         margin-bottom: 4px;
-        padding: 2px 4px;
+        padding: 4px 6px;
         border-radius: 6px;
         transition: background-color 0.2s;
     }
-    div[data-baseweb="checkbox"]:hover {
-        background-color: #1A1E29;
+    div[data-baseweb="checkbox"]:hover, div[data-baseweb="radio"]:hover {
+        background-color: var(--bg-sec);
     }
     div[data-baseweb="checkbox"] input:checked + div,
-    div[role="checkbox"][aria-checked="true"] {
-        background-color: #2962FF !important;
-        border-color: #2962FF !important;
+    div[role="checkbox"][aria-checked="true"],
+    div[data-baseweb="radio"] input:checked + div {
+        background-color: var(--primary-color) !important;
+        border-color: var(--primary-color) !important;
     }
     div[data-baseweb="checkbox"] svg {
         fill: #FFFFFF !important;
     }
-    div[data-baseweb="checkbox"] span {
-        color: #E0E3EB !important;
+    div[data-baseweb="checkbox"] span, div[data-baseweb="radio"] span {
+        color: var(--text-main) !important;
         font-size: 13px !important;
         font-weight: 500 !important;
     }
     
-    .stSidebar div[data-testid="stExpander"] {
-        border: 1px solid #282D3C !important;
-        background-color: #1A1E29 !important;
-        border-radius: 8px !important;
-        margin-bottom: 8px !important;
+    /* SIDEBAR Y EXPANDERS */
+    .stSidebar {
+        background-color: rgba(17, 22, 34, 0.95) !important;
+        border-right: 1px solid var(--border-main) !important;
     }
-    .stSidebar div[data-testid="stExpander"] details {
+    div[data-testid="stExpander"] {
+        border: 1px solid var(--border-light) !important;
+        background-color: var(--bg-card) !important;
+        border-radius: 10px !important;
+        margin-bottom: 12px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    div[data-testid="stExpander"] details {
         border: none !important;
         background-color: transparent !important;
     }
-    .stSidebar div[data-testid="stExpander"] summary {
+    div[data-testid="stExpander"] summary {
         background-color: transparent !important;
         border: none !important;
-        padding: 6px 10px !important;
-        color: #E0E3EB !important;
+        padding: 8px 12px !important;
+        color: var(--text-main) !important;
         font-size: 13px !important;
         font-weight: 700 !important;
     }
-    .stSidebar div[data-testid="stExpander"] summary:hover {
-        color: #2962FF !important;
+    div[data-testid="stExpander"] summary:hover {
+        color: var(--primary-color) !important;
     }
 
+    /* BOTONES */
     .stButton > button {
-        border-radius: 8px !important;
-        border: 1px solid #282D3C !important;
-        background-color: #1A1E29 !important;
-        color: #E0E3EB !important;
+        border-radius: 6px !important;
+        border: 1px solid var(--border-light) !important;
+        background-color: var(--bg-sec) !important;
+        color: var(--text-main) !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        transition: all 0.2s ease;
     }
     .stButton > button:hover {
-        border-color: #2962FF !important;
-        color: #2962FF !important;
+        border-color: var(--primary-color) !important;
+        color: var(--primary-color) !important;
+        background-color: var(--bg-card) !important;
     }
     
-    .metric-card {
-        background-color: #1A1E29;
-        border: 1px solid #282D3C;
-        border-radius: 10px;
+    /* KPI CARDS (Rediseñadas tipo Tailwind) */
+    .kpi-card {
+        background-color: rgba(22, 29, 46, 0.9);
+        border: 1px solid var(--border-main);
+        border-radius: 12px;
         padding: 16px;
         margin-bottom: 12px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
-    .metric-title {
-        color: #787B86;
-        font-size: 12px;
+    .kpi-card:hover {
+        border-color: var(--border-light);
+    }
+    .kpi-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--text-muted);
+        font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
     }
-    .metric-value {
+    .kpi-value {
         font-size: 24px;
         font-weight: 800;
-        margin-top: 4px;
+        font-family: 'JetBrains Mono', monospace;
+        letter-spacing: -0.025em;
     }
-    .green-text { color: #26A69A; font-weight: 700; }
-    .red-text { color: #EF5350; font-weight: 700; }
-    .blue-text { color: #2962FF; }
+    .kpi-meta {
+        margin-top: 10px;
+        font-size: 11px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .badge {
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        border: 1px solid;
+    }
+    .badge-win { background-color: rgba(16, 185, 129, 0.15); color: var(--win-color); border-color: rgba(16, 185, 129, 0.2); }
+    .badge-loss { background-color: rgba(244, 63, 94, 0.15); color: var(--loss-color); border-color: rgba(244, 63, 94, 0.2); }
+    .badge-be { background-color: rgba(100, 116, 139, 0.15); color: var(--be-color); border-color: rgba(100, 116, 139, 0.2); }
+
+    .color-win { color: var(--win-color) !important; font-weight: 700; }
+    .color-loss { color: var(--loss-color) !important; font-weight: 700; }
+    .color-be { color: var(--be-color) !important; font-weight: 700; }
+    .color-blue { color: var(--blue-accent) !important; font-weight: 700; }
 
     div[data-testid="stHorizontalBlock"] {
         align-items: center !important;
@@ -142,8 +212,8 @@ st.markdown("""
     div[data-testid="stDialog"] > div {
         max-width: 92vw !important;
         width: 92vw !important;
-        background-color: #12151C !important;
-        border: 1px solid #282D3C !important;
+        background-color: var(--bg-main) !important;
+        border: 1px solid var(--border-light) !important;
         border-radius: 12px !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
@@ -255,7 +325,6 @@ def process_raw_operations(ops_list):
         
     return processed_ops
 
-# AUMENTADO DE TTL=3 A TTL=300 (5 MINUTOS DE RETENCIÓN EN RAM)
 @st.cache_data(ttl=300)
 def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
@@ -347,16 +416,23 @@ def mostrar_modal_zoom(cap):
 # -----------------------------------------------------------------------------
 # 3. BARRA LATERAL / ORGANIZACIÓN DE CUENTAS
 # -----------------------------------------------------------------------------
-st.sidebar.title("⚡ StickTrade")
-st.sidebar.caption("Analytics de Cuentas de Fondeo")
-
-st.sidebar.markdown("---")
+st.sidebar.markdown("""
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1rem;">
+    <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(to top right, #2962FF, #06B6D4); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(41, 98, 255, 0.2);">
+        <i class="fa-solid fa-chart-candlestick" style="color: white; font-size: 16px;"></i>
+    </div>
+    <div style="display: flex; flex-direction: column;">
+        <span style="font-size: 16px; font-weight: 800; color: white; letter-spacing: -0.5px;">StickTrade</span>
+        <span style="font-size: 10px; color: #94A3B8;">Analytics de Cuentas de Fondeo</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
-st.sidebar.markdown("### 🔍 Selección de Cuentas")
+st.sidebar.markdown("### <i class='fa-solid fa-sliders' style='color:#2962FF; margin-right:4px;'></i> Selección de Cuentas", unsafe_allow_html=True)
 
 cuentas_funded = []
 cuentas_challenges = []
@@ -518,8 +594,15 @@ df_ops_trading = df_ops[df_ops.get("tipo", "").astype(str).str.upper() != "WITHD
 # -----------------------------------------------------------------------------
 # 4. ENCABEZADO Y KPI CARDS
 # -----------------------------------------------------------------------------
-st.title("📈 StickTrade — Dashboard")
-st.caption("Visión consolidada y métricas de rendimiento en tiempo real.")
+st.markdown("""
+<div style="display:flex; align-items:center; gap: 12px; margin-bottom: 0.5rem;">
+    <div style="padding: 8px; border-radius: 8px; background-color: var(--bg-card); border: 1px solid var(--border-light); color: var(--blue-accent);">
+        <i class="fa-solid fa-chart-line" style="font-size: 1.25rem;"></i>
+    </div>
+    <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: white;">StickTrade <span style="color:#64748B; font-weight:300;">—</span> Dashboard</h1>
+</div>
+<p style="color: #94A3B8; font-size: 13px; margin-top: 0; margin-bottom: 1.5rem;">Visión consolidada y métricas de rendimiento cuantitativo en tiempo real.</p>
+""", unsafe_allow_html=True)
 
 tot_inicial = sum([c["balance_inicial"] for c in cuentas]) if cuentas else 0
 tot_actual = sum([c["balance"] for c in cuentas]) if cuentas else 0
@@ -548,49 +631,56 @@ risk_reward = (avg_win / avg_loss) if avg_loss > 0 else 0
 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
 
 with kpi1:
-    color = "green-text" if tot_ganado >= 0 else "red-text"
+    badge_class = "badge-win" if tot_ganado >= 0 else "badge-loss"
+    val_color = "white"
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">Capital Gestionado</div>
-        <div class="metric-value">${tot_actual:,.2f}</div>
-        <div class="{color}" style="font-size:12px;">{pct_global:+.2f}% (${tot_ganado:,.2f})</div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span>Capital Gestionado</span><i class="fa-solid fa-vault"></i></div>
+        <div class="kpi-value" style="color: {val_color};">${tot_actual:,.2f}</div>
+        <div class="kpi-meta"><span class="badge {badge_class}">{pct_global:+.2f}% (${tot_ganado:,.2f})</span></div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi2:
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">Win Rate</div>
-        <div class="metric-value green-text">{win_rate:.1f}%</div>
-        <div style="color:#787B86; font-size:12px;">{wins}W / {losses}L / {be_cnt}BE ({total_dias_operados} días)</div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span>Win Rate</span><i class="fa-solid fa-bullseye"></i></div>
+        <div class="kpi-value color-win">{win_rate:.1f}%</div>
+        <div class="kpi-meta color-muted">
+            <span class="color-win">{wins}W</span> / <span class="color-loss">{losses}L</span> / <span style="color:var(--be-color)">{be_cnt}BE</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi3:
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">Profit Factor</div>
-        <div class="metric-value">{profit_factor:.2f}</div>
-        <div style="color:#787B86; font-size:12px;">G: ${gross_profit:,.0f} | P: ${gross_loss:,.0f}</div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span>Profit Factor</span><i class="fa-solid fa-scale-balanced"></i></div>
+        <div class="kpi-value" style="color: white;">{profit_factor:.2f}</div>
+        <div class="kpi-meta color-muted">
+            <span class="color-win">G: ${gross_profit:,.0f}</span> | <span class="color-loss">P: ${gross_loss:,.0f}</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi4:
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">Ratio R/R Real</div>
-        <div class="metric-value">1 : {risk_reward:.2f}</div>
-        <div style="color:#787B86; font-size:12px;">Avg W: ${avg_win:,.0f} | Avg L: ${avg_loss:,.0f}</div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span>Ratio R/R Real</span><i class="fa-solid fa-arrows-split-up-and-left"></i></div>
+        <div class="kpi-value" style="color: white;">1 : {risk_reward:.2f}</div>
+        <div class="kpi-meta" style="color:#E2E8F0;">
+            Avg W: <span style="font-weight:bold;">${avg_win:,.0f}</span> | Avg L: <span style="font-weight:bold;">${avg_loss:,.0f}</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi5:
     cant_cuentas = len(cuentas)
     st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-title">Cuentas Seleccionadas</div>
-        <div class="metric-value">{cant_cuentas}</div>
-        <div style="color:#787B86; font-size:12px;">Fondeadas & Challenges</div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span>Cuentas Filtro</span><i class="fa-solid fa-layer-group"></i></div>
+        <div class="kpi-value color-blue">{cant_cuentas}</div>
+        <div class="kpi-meta" style="color:var(--text-muted); font-family:'Inter', sans-serif;">Fondeadas & Challenges</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -612,7 +702,7 @@ tab_calendar, tab_analytics, tab_cuentas, tab_trades = st.tabs([
 with tab_calendar:
     col_t1, col_t2 = st.columns([3, 1])
     with col_t1:
-        st.subheader("📅 Calendario Mensual de Resultados")
+        st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-regular fa-calendar-days' style='color:var(--blue-accent); margin-right:6px;'></i> Calendario Mensual de Resultados</h3>", unsafe_allow_html=True)
     with col_t2:
         mostrar_simbolos_cal = st.toggle("👁️ Desglose por símbolo", value=True, key="toggle_simbolos_cal")
     
@@ -672,37 +762,38 @@ with tab_calendar:
     
     css_cal = """
     <style>
-        body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .tradelio-cal-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 45px 15px 45px 15px; overflow: visible !important; }
+        body { margin:0; padding:0; background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }
+        .tradelio-cal-container { background-color: var(--bg-main); border: 1px solid var(--border-light); border-radius: 12px; padding: 25px 15px 45px 15px; overflow: visible !important; }
         .tradelio-grid { display: grid; grid-template-columns: 130px repeat(7, 1fr); gap: 8px; overflow: visible !important; }
-        .tradelio-header { text-align: center; font-weight: 700; font-size: 11px; color: #787B86; text-transform: uppercase; padding-bottom: 4px; }
-        .week-summary-card { background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
-        .week-title { font-size: 11px; color: #A3A6AF; font-weight: 600; }
+        .tradelio-header { text-align: center; font-weight: 700; font-size: 11px; color: var(--text-muted); text-transform: uppercase; padding-bottom: 4px; }
+        .week-summary-card { background-color: var(--bg-card); border: 1px solid var(--border-main); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 85px; box-sizing: border-box; }
+        .week-title { font-size: 11px; color: var(--text-muted); font-weight: 600; }
         .week-pct { font-size: 11px; font-weight: 700; margin-left: 4px; }
-        .week-pct.green { color: #4ADE80 !important; }
-        .week-pct.red { color: #EF5350 !important; }
-        .week-pct.neutral { color: #787B86; }
-        .week-val { font-size: 17px; font-weight: 800; margin-top: 4px; color: #FFFFFF; }
+        .week-pct.green { color: var(--win-color) !important; }
+        .week-pct.red { color: var(--loss-color) !important; }
+        .week-pct.neutral { color: var(--be-color); }
+        .week-val { font-size: 16px; font-weight: 800; margin-top: 4px; color: #FFFFFF; font-family: 'JetBrains Mono', monospace; }
         
-        .day-box { position: relative; background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; cursor: pointer; }
-        .day-box.empty-day { background-color: #141722; border: 1px solid #1E222E; cursor: default; }
+        .day-box { position: relative; background-color: var(--bg-card); border: 1px solid var(--border-main); border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; cursor: pointer; transition: border-color 0.2s; }
+        .day-box:hover { border-color: var(--border-light); }
+        .day-box.empty-day { background-color: var(--bg-sec); border: 1px solid var(--border-main); cursor: default; }
         
-        .day-box.win-day { background-color: #11321E !important; border: 1px solid #1F5938 !important; }
-        .day-box.loss-day { background-color: #3C1C21 !important; border: 1px solid #63272F !important; }
+        .day-box.win-day { background-color: rgba(16, 185, 129, 0.1) !important; border: 1px solid rgba(16, 185, 129, 0.3) !important; }
+        .day-box.loss-day { background-color: rgba(244, 63, 94, 0.1) !important; border: 1px solid rgba(244, 63, 94, 0.3) !important; }
         
-        .day-num { font-size: 11px; font-weight: 700; color: #D1D4DC; text-align: right; }
+        .day-num { font-size: 11px; font-weight: 700; color: #E2E8F0; text-align: right; }
         .day-content { text-align: right; }
-        .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF !important; }
-        .day-meta { font-size: 9px; color: #A3A6AF; margin-top: 2px; }
-        .green-meta { color: #4ADE80 !important; font-weight: 700; }
-        .red-meta { color: #EF5350 !important; font-weight: 700; }
+        .day-pnl { font-size: 13px; font-weight: 800; color: #FFFFFF !important; font-family: 'JetBrains Mono', monospace; }
+        .day-meta { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+        .green-meta { color: var(--win-color) !important; font-weight: 700; }
+        .red-meta { color: var(--loss-color) !important; font-weight: 700; }
 
         .day-tooltip {
             visibility: hidden;
             opacity: 0;
             position: absolute;
-            background-color: #1A1E29;
-            border: 1px solid #2962FF;
+            background-color: var(--bg-card);
+            border: 1px solid var(--primary-color);
             border-radius: 8px;
             padding: 10px 12px;
             width: 270px;
@@ -717,7 +808,6 @@ with tab_calendar:
 
         .day-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
         .day-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
-
         .day-tooltip.align-left { left: 0 !important; transform: none !important; }
         .day-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
         .day-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
@@ -726,9 +816,9 @@ with tab_calendar:
             visibility: visible;
             opacity: 1;
         }
-        .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
-        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+        .tooltip-title { font-size: 10px; font-weight: 800; color: var(--primary-color); border-bottom: 1px solid var(--border-main); padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; font-family: 'JetBrains Mono', monospace; }
+        .tooltip-acc-name { color: var(--text-main); font-weight: 600; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-family: 'Inter', sans-serif;}
         .tooltip-acc-val { font-weight: 800; font-size: 11px; color: #FFFFFF !important; }
     </style>
     """
@@ -799,21 +889,21 @@ with tab_calendar:
                         
                         tooltip_html += f"""
                         <div class='tooltip-row'>
-                            <span class='tooltip-acc-name'><span style='color:#FFFFFF; font-weight:700;'>({tr_acc} ops)</span> {acc_n}</span>
-                            <span class='tooltip-acc-val' style='color:#FFFFFF; font-weight:800;'>{sign_str}${pnl_acc:,.2f}</span>
+                            <span class='tooltip-acc-name'><span style='color:var(--text-muted); font-weight:700;'>({tr_acc} ops)</span> {acc_n}</span>
+                            <span class='tooltip-acc-val'>{sign_str}${pnl_acc:,.2f}</span>
                         </div>
                         """
                         if mostrar_simbolos_cal and acc_info.get('symbols'):
-                            tooltip_html += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
+                            tooltip_html += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:1px solid var(--border-light);'>"
                             for s_info in acc_info['symbols']:
                                 s_sym = s_info['symbol']
                                 s_pnl = s_info['pnl']
                                 s_tr = s_info['trades']
                                 s_sign = "+" if s_pnl > 0 else ""
                                 tooltip_html += f"""
-                                <div class='tooltip-row' style='font-size:10px; color:#E0E3EB; margin-bottom:2px;'>
-                                    <span>↳ <b>{s_sym}</b> <span style='color:#FFFFFF;'>({s_tr} ops)</span></span>
-                                    <span style='color:#FFFFFF; font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
+                                <div class='tooltip-row' style='font-size:10px; color:var(--text-main); margin-bottom:2px;'>
+                                    <span style='font-family:Inter;'>↳ <b>{s_sym}</b> <span style='color:var(--text-muted);'>({s_tr} ops)</span></span>
+                                    <span style='font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                                 </div>
                                 """
                             tooltip_html += "</div>"
@@ -844,7 +934,7 @@ with tab_calendar:
     
     col_a_hdr1, col_a_hdr2 = st.columns([3, 1])
     with col_a_hdr1:
-        st.subheader("🗓️ Resumen Anual — Calendario Mes a Mes")
+        st.markdown("<h3 style='font-size:16px; font-weight:700;'><i class='fa-regular fa-calendar' style='color:var(--blue-accent); margin-right:6px;'></i> Resumen Anual — Calendario Mes a Mes</h3>", unsafe_allow_html=True)
         st.caption("Evolución mensual consolidada según las cuentas seleccionadas.")
     with col_a_hdr2:
         ano_sel_annual = st.number_input("Año Resumen Anual:", min_value=2024, max_value=2030, value=now.year, key="ano_annual_sel")
@@ -853,14 +943,14 @@ with tab_calendar:
     
     css_annual = """
     <style>
-        body { margin:0; padding:0; background-color:#12151C; color:#E0E3EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .annual-container { background-color: #12151C; border: 1px solid #222631; border-radius: 12px; padding: 45px 15px 45px 15px; overflow: visible !important; }
+        body { margin:0; padding:0; background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }
+        .annual-container { background-color: var(--bg-main); border: 1px solid var(--border-light); border-radius: 12px; padding: 25px 15px 45px 15px; overflow: visible !important; }
         .annual-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; overflow: visible !important; }
         
         .month-card {
             position: relative;
-            background-color: #1A1E29;
-            border: 1px solid #282D3C;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-main);
             border-radius: 10px;
             padding: 12px 14px;
             box-sizing: border-box;
@@ -872,27 +962,27 @@ with tab_calendar:
             justify-content: space-between;
         }
         .month-card:hover {
-            border-color: #2962FF !important;
+            border-color: var(--border-light) !important;
         }
-        .month-card.win-month { background-color: #11321E !important; border: 1px solid #1F5938 !important; }
-        .month-card.loss-month { background-color: #3C1C21 !important; border: 1px solid #63272F !important; }
+        .month-card.win-month { background-color: rgba(16, 185, 129, 0.1) !important; border: 1px solid rgba(16, 185, 129, 0.3) !important; }
+        .month-card.loss-month { background-color: rgba(244, 63, 94, 0.1) !important; border: 1px solid rgba(244, 63, 94, 0.3) !important; }
 
         .month-header { display: flex; justify-content: space-between; align-items: center; }
-        .month-title { font-size: 12px; font-weight: 800; color: #A3A6AF; text-transform: uppercase; letter-spacing: 0.5px; }
-        .month-pct { font-size: 11px; font-weight: 800; }
-        .month-pct.green { color: #4ADE80 !important; }
-        .month-pct.red { color: #EF5350 !important; }
-        .month-pct.neutral { color: #787B86 !important; }
+        .month-title { font-size: 12px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .month-pct { font-size: 11px; font-weight: 800; font-family: 'JetBrains Mono', monospace;}
+        .month-pct.green { color: var(--win-color) !important; }
+        .month-pct.red { color: var(--loss-color) !important; }
+        .month-pct.neutral { color: var(--be-color) !important; }
 
-        .month-pnl { font-size: 18px; font-weight: 800; color: #FFFFFF !important; margin-top: 4px; }
-        .month-meta { font-size: 10px; color: #A3A6AF; margin-top: 2px; }
+        .month-pnl { font-size: 18px; font-weight: 800; color: #FFFFFF !important; margin-top: 4px; font-family: 'JetBrains Mono', monospace;}
+        .month-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 
         .month-tooltip {
             visibility: hidden;
             opacity: 0;
             position: absolute;
-            background-color: #1A1E29;
-            border: 1px solid #2962FF;
+            background-color: var(--bg-card);
+            border: 1px solid var(--primary-color);
             border-radius: 8px;
             padding: 10px 12px;
             width: 270px;
@@ -907,7 +997,6 @@ with tab_calendar:
 
         .month-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
         .month-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
-
         .month-tooltip.align-left { left: 0 !important; transform: none !important; }
         .month-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
         .month-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
@@ -916,9 +1005,9 @@ with tab_calendar:
             visibility: visible;
             opacity: 1;
         }
-        .tooltip-title { font-size: 10px; font-weight: 800; color: #2962FF; border-bottom: 1px solid #282D3C; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; }
-        .tooltip-acc-name { color: #E0E3EB; font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+        .tooltip-title { font-size: 10px; font-weight: 800; color: var(--primary-color); border-bottom: 1px solid var(--border-main); padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tooltip-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; font-family: 'JetBrains Mono', monospace; }
+        .tooltip-acc-name { color: var(--text-main); font-weight: 600; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-family: 'Inter', sans-serif;}
         .tooltip-acc-val { font-weight: 800; font-size: 11px; color: #FFFFFF !important; }
     </style>
     """
@@ -990,7 +1079,7 @@ with tab_calendar:
                 pct_cls = "neutral"
                 pnl_fmt = "$0.00"
 
-            meta_str = f"{dias_op} días op. | <span class='green-meta'>{w_days}W</span> - <span class='red-meta'>{l_days}L</span>"
+            meta_str = f"{dias_op} días op. | <span style='color:var(--win-color); font-weight:700;'>{w_days}W</span> - <span style='color:var(--loss-color); font-weight:700;'>{l_days}L</span>"
 
             v_cls = "tooltip-down" if m <= 8 else "tooltip-up"
 
@@ -1010,21 +1099,21 @@ with tab_calendar:
                 s_str = "+" if p_acc > 0 else ""
                 tooltip_m += f"""
                 <div class='tooltip-row'>
-                    <span class='tooltip-acc-name'><span style='color:#FFFFFF; font-weight:700;'>({t_acc} ops)</span> {n_acc}</span>
-                    <span class='tooltip-acc-val' style='color:#FFFFFF; font-weight:800;'>{s_str}${p_acc:,.2f}</span>
+                    <span class='tooltip-acc-name'><span style='color:var(--text-muted); font-weight:700;'>({t_acc} ops)</span> {n_acc}</span>
+                    <span class='tooltip-acc-val'>{s_str}${p_acc:,.2f}</span>
                 </div>
                 """
                 if mostrar_simbolos_cal and acc_i.get('symbols'):
-                    tooltip_m += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:2px solid #282D3C;'>"
+                    tooltip_m += "<div style='margin-left:8px; margin-bottom:6px; padding-left:6px; border-left:1px solid var(--border-light);'>"
                     for s_info in acc_i['symbols']:
                         s_sym = s_info['symbol']
                         s_pnl = s_info['pnl']
                         s_tr = s_info['trades']
                         s_sign = "+" if s_pnl > 0 else ""
                         tooltip_m += f"""
-                        <div class='tooltip-row' style='font-size:10px; color:#E0E3EB; margin-bottom:2px;'>
-                            <span>↳ <b>{s_sym}</b> <span style='color:#FFFFFF;'>({s_tr} ops)</span></span>
-                            <span style='color:#FFFFFF; font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
+                        <div class='tooltip-row' style='font-size:10px; color:var(--text-main); margin-bottom:2px;'>
+                            <span style='font-family:Inter;'>↳ <b>{s_sym}</b> <span style='color:var(--text-muted);'>({s_tr} ops)</span></span>
+                            <span style='font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
                     tooltip_m += "</div>"
@@ -1070,12 +1159,12 @@ with tab_calendar:
 # TAB 2: GRÁFICOS Y ANALYTICS
 # =============================================================================
 with tab_analytics:
-    st.subheader("📊 Analytics y Curva de Balance por Cuenta")
+    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-chart-column' style='color:var(--blue-accent); margin-right:6px;'></i> Analytics y Curva de Balance por Cuenta</h3>", unsafe_allow_html=True)
     
     if df_ops_trading.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        st.markdown("### 📈 Rendimiento Consolidado Global")
+        st.markdown("#### 📈 Rendimiento Consolidado Global")
         
         filtro_periodo_global = st.radio(
             "📅 Rango Temporal Global:",
@@ -1134,16 +1223,18 @@ with tab_analytics:
                     mode='lines',
                     name='Balance Consolidado',
                     line=dict(color='#2962FF', width=3),
+                    fill='tozeroy',
+                    fillcolor='rgba(41, 98, 255, 0.1)',
                     hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                 ))
 
                 fig_balance.update_layout(
                     title=f'<b>Evolución de la Curva de Balance Consolidada ($)</b>',
-                    paper_bgcolor='#1A1E29',
-                    plot_bgcolor='#1A1E29',
-                    font=dict(color='#E0E3EB'),
-                    xaxis=dict(gridcolor='#282D3C', showgrid=True),
-                    yaxis=dict(gridcolor='#282D3C', showgrid=True, range=y_range_g),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#E2E8F0', family='Inter'),
+                    xaxis=dict(gridcolor='#1E293B', showgrid=True),
+                    yaxis=dict(gridcolor='#1E293B', showgrid=True, range=y_range_g),
                     margin=dict(l=20, r=20, t=40, b=20),
                     height=380
                 )
@@ -1153,21 +1244,22 @@ with tab_analytics:
                 fig_donut = go.Figure(data=[go.Pie(
                     labels=['Wins', 'Losses', 'BE'],
                     values=[wins_g, losses_g, be_g],
-                    hole=.6,
-                    marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
+                    hole=.65,
+                    marker=dict(colors=['#10B981', '#F43F5E', '#64748B'], line=dict(color='#0B0E14', width=2))
                 )])
                 fig_donut.update_layout(
-                    title='<b>Distribución Win / Loss Global (Aplicativo)</b>',
-                    paper_bgcolor='#1A1E29',
-                    font=dict(color='#E0E3EB'),
+                    title='<b>Distribución Win / Loss Global</b>',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#E2E8F0', family='Inter'),
                     margin=dict(l=20, r=20, t=40, b=20),
                     height=380,
-                    showlegend=True
+                    showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
                 )
                 st.plotly_chart(fig_donut, use_container_width=True)
 
         st.divider()
-        st.markdown("### 🏢 Curva de Balance & Distribución por Cuenta Individual")
+        st.markdown("#### 🏢 Curva de Balance & Distribución por Cuenta Individual")
         
         for c_acc in cuentas:
             acc_num_str = str(c_acc["account_number"])
@@ -1231,15 +1323,17 @@ with tab_analytics:
                             mode='lines',
                             name=f'Balance #{acc_num_str}',
                             line=dict(color='#2962FF', width=2.5),
+                            fill='tozeroy',
+                            fillcolor='rgba(41, 98, 255, 0.1)',
                             hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                         ))
                         fig_acc_bal.update_layout(
                             title=f'<b>Curva de Balance — {acc_name} (#{acc_num_str})</b>',
-                            paper_bgcolor='#1A1E29',
-                            plot_bgcolor='#1A1E29',
-                            font=dict(color='#E0E3EB'),
-                            xaxis=dict(gridcolor='#282D3C', showgrid=True),
-                            yaxis=dict(gridcolor='#282D3C', showgrid=True, range=y_range_a),
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#E2E8F0', family='Inter'),
+                            xaxis=dict(gridcolor='#1E293B', showgrid=True),
+                            yaxis=dict(gridcolor='#1E293B', showgrid=True, range=y_range_a),
                             margin=dict(l=20, r=20, t=40, b=20),
                             height=300
                         )
@@ -1249,16 +1343,17 @@ with tab_analytics:
                         fig_acc_donut = go.Figure(data=[go.Pie(
                             labels=['Wins', 'Losses', 'BE'],
                             values=[w_acc, l_acc, be_acc],
-                            hole=.6,
-                            marker=dict(colors=['#26A69A', '#EF5350', '#787B86'])
+                            hole=.65,
+                            marker=dict(colors=['#10B981', '#F43F5E', '#64748B'], line=dict(color='#161D2E', width=2))
                         )])
                         fig_acc_donut.update_layout(
-                            title=f'<b>Win/Loss (Aplicativo) — {acc_name}</b>',
-                            paper_bgcolor='#1A1E29',
-                            font=dict(color='#E0E3EB'),
+                            title=f'<b>Win/Loss — {acc_name}</b>',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#E2E8F0', family='Inter'),
                             margin=dict(l=20, r=20, t=40, b=20),
                             height=300,
-                            showlegend=True
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5)
                         )
                         st.plotly_chart(fig_acc_donut, use_container_width=True)
 
@@ -1266,7 +1361,7 @@ with tab_analytics:
 # TAB 3: ESTADO DE CUENTAS
 # =============================================================================
 with tab_cuentas:
-    st.subheader("🛡️ Monitoreo de Reglas y Drawdown por Cuenta")
+    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-wallet' style='color:var(--blue-accent); margin-right:6px;'></i> Monitoreo de Reglas y Drawdown por Cuenta</h3>", unsafe_allow_html=True)
     
     if not cuentas:
         st.info("No hay cuentas seleccionadas.")
@@ -1289,13 +1384,13 @@ with tab_cuentas:
             with st.expander(f"🔹 {c['nombre_cuenta'].upper()} | ID #{acc_num_str} — [{estado_tag.upper()}]", expanded=True):
                 
                 st.markdown(f"""
-                <div style="background-color: #12151C; padding: 12px 16px; border-radius: 8px; border: 1px solid #282D3C; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="background-color: var(--bg-sec); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <span style="font-size: 22px; font-weight: 800; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">{c['nombre_cuenta']}</span>
-                        <span style="font-size: 14px; color: #787B86; margin-left: 12px; font-weight: 600;">ID #{acc_num_str}</span>
+                        <span style="font-size: 20px; font-weight: 800; color: #FFFFFF; font-family: 'Inter', sans-serif;">{c['nombre_cuenta']}</span>
+                        <span style="font-size: 13px; color: var(--text-muted); margin-left: 12px; font-weight: 600; font-family:'JetBrains Mono', monospace;">ID #{acc_num_str}</span>
                     </div>
                     <div>
-                        <span style="background-color: #2962FF; color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
+                        <span style="background-color: var(--primary-color); color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1320,9 +1415,9 @@ with tab_cuentas:
                     col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
                 
                 if ganancia < 0:
-                    str_ganancia = f"<span style='color:#EF5350; font-weight:bold;'>-${abs(ganancia):,.2f}</span>"
+                    str_ganancia = f"<span class='color-loss'>-${abs(ganancia):,.2f}</span>"
                 elif ganancia > 0:
-                    str_ganancia = f"<span style='color:#26A69A; font-weight:bold;'>+${ganancia:,.2f}</span>"
+                    str_ganancia = f"<span class='color-win'>+${ganancia:,.2f}</span>"
                 else:
                     str_ganancia = "$0.00"
                     
@@ -1333,18 +1428,18 @@ with tab_cuentas:
                     pct_p_val = min(max(pct_prog * 100, 0.0), 100.0)
                     st.write("**Progreso hacia el Objetivo (Phase Pass):**")
                     st.markdown(f"""
-                    <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
-                        <div style="background-color: #26A69A; width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                    <div style="background-color: var(--bg-sec); border: 1px solid var(--border-main); border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
+                        <div style="background-color: var(--win-color); width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
                     </div>
-                    <div style="font-size: 12px; color: #A3A6AF; margin-top: 4px; margin-bottom: 12px;">{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; margin-bottom: 12px; font-family:'JetBrains Mono', monospace;">{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})</div>
                     """, unsafe_allow_html=True)
                 else:
                     st.caption("🟢 Cuenta Fondeada activa.")
                 
                 if p_act > 0:
-                    str_p_act = f"<span style='color:#EF5350; font-weight:bold;'>-${p_act:,.2f}</span>"
+                    str_p_act = f"<span class='color-loss'>-${p_act:,.2f}</span>"
                 else:
-                    str_p_act = f"<span style='color:#26A69A; font-weight:bold;'>$0.00</span>"
+                    str_p_act = f"<span class='color-win'>$0.00</span>"
                     
                 str_p_max = f"${p_max:,.2f}"
                 pct_drawdown = min(max(p_act / p_max, 0.0), 1.0) if p_max > 0 else 0
@@ -1352,10 +1447,10 @@ with tab_cuentas:
                 
                 st.write("**Límite de Pérdida Máxima Consumido:**")
                 st.markdown(f"""
-                <div style="background-color: #1A1E29; border: 1px solid #282D3C; border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
-                    <div style="background-color: #EF5350; width: {pct_d_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                <div style="background-color: var(--bg-sec); border: 1px solid var(--border-main); border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
+                    <div style="background-color: var(--loss-color); width: {pct_d_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
                 </div>
-                <div style="font-size: 12px; color: #A3A6AF; margin-top: 4px;">{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; font-family:'JetBrains Mono', monospace;">{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})</div>
                 """, unsafe_allow_html=True)
 
                 if es_fondeada:
@@ -1404,7 +1499,7 @@ with tab_cuentas:
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
 with tab_trades:
-    st.subheader("📖 Historial & Analítica de Operaciones")
+    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-receipt' style='color:var(--blue-accent); margin-right:6px;'></i> Historial & Analítica de Operaciones</h3>", unsafe_allow_html=True)
     st.caption("Filtra y revisa las sesiones por fecha, cuenta, símbolo y estado.")
     
     hoy = datetime.date.today()
@@ -1466,16 +1561,16 @@ with tab_trades:
                     color="clasificacion",
                     orientation='h',
                     title="<b>Distribución Win / Loss / BE por Cuenta (%)</b>",
-                    color_discrete_map={'WIN': '#26A69A', 'LOSS': '#EF5350', 'BE': '#787B86'},
+                    color_discrete_map={'WIN': '#10B981', 'LOSS': '#F43F5E', 'BE': '#64748B'},
                     text=acc_stats['pct_cuenta'].apply(lambda x: f"{x:.0f}%")
                 )
                 fig_hbar.update_layout(
                     barmode='stack',
-                    paper_bgcolor='#1A1E29',
-                    plot_bgcolor='#1A1E29',
-                    font=dict(color='#E0E3EB'),
-                    xaxis=dict(title="% del Total de Días Operados", gridcolor='#282D3C', range=[0, 100]),
-                    yaxis=dict(title="", gridcolor='#282D3C'),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#E2E8F0', family='Inter'),
+                    xaxis=dict(title="% del Total de Días Operados", gridcolor='#1E293B', range=[0, 100]),
+                    yaxis=dict(title="", gridcolor='#1E293B'),
                     margin=dict(l=20, r=20, t=40, b=20),
                     height=330,
                     showlegend=True
@@ -1486,21 +1581,21 @@ with tab_trades:
                 tot_counts = df_filtered_tab4["clasificacion"].value_counts().reset_index()
                 tot_counts.columns = ["clasificacion", "cantidad"]
                 
-                color_map = {'WIN': '#26A69A', 'LOSS': '#EF5350', 'BE': '#787B86'}
+                color_map = {'WIN': '#10B981', 'LOSS': '#F43F5E', 'BE': '#64748B'}
                 tot_counts['color'] = tot_counts['clasificacion'].map(color_map)
                 
                 fig_pie = go.Figure(data=[go.Pie(
                     labels=tot_counts['clasificacion'],
                     values=tot_counts['cantidad'],
                     hole=.5,
-                    marker=dict(colors=tot_counts['color']),
+                    marker=dict(colors=tot_counts['color'], line=dict(color='#0B0E14', width=2)),
                     textinfo='label+percent+value',
                     hovertemplate="%{label}: %{value} días (%{percent})<extra></extra>"
                 )])
                 fig_pie.update_layout(
                     title="<b>Total Periodo Filtrado (Días & %)</b>",
-                    paper_bgcolor='#1A1E29',
-                    font=dict(color='#E0E3EB'),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#E2E8F0', family='Inter'),
                     margin=dict(l=20, r=20, t=40, b=20),
                     height=330,
                     showlegend=True
@@ -1509,19 +1604,19 @@ with tab_trades:
                 
             st.divider()
             
-            st.subheader("📑 Detalle de Sesiones Diarias & Capturas")
+            st.markdown("<h3 style='font-size:16px; font-weight:700;'><i class='fa-solid fa-list-check' style='color:var(--blue-accent); margin-right:6px;'></i> Detalle de Sesiones Diarias & Capturas</h3>", unsafe_allow_html=True)
             st.caption("Tabla de historial alineada. Haz clic en el botón de estado para abrir las capturas.")
             
             hdr_c1, hdr_c2, hdr_c3, hdr_c4, hdr_c5, hdr_c6, hdr_c7 = st.columns([1.0, 1.5, 1.1, 1.2, 1.2, 1.0, 1.5])
-            hdr_c1.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>FECHA</span>", unsafe_allow_html=True)
-            hdr_c2.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>CUENTA</span>", unsafe_allow_html=True)
-            hdr_c3.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ID CUENTA</span>", unsafe_allow_html=True)
-            hdr_c4.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>SÍMBOLO</span>", unsafe_allow_html=True)
-            hdr_c5.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>RESULTADO ($)</span>", unsafe_allow_html=True)
-            hdr_c6.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>% REND.</span>", unsafe_allow_html=True)
-            hdr_c7.markdown("<span style='color:#787B86; font-size:12px; font-weight:700;'>ESTADO / CAPTURAS</span>", unsafe_allow_html=True)
+            hdr_c1.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>FECHA</span>", unsafe_allow_html=True)
+            hdr_c2.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>CUENTA</span>", unsafe_allow_html=True)
+            hdr_c3.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>ID CUENTA</span>", unsafe_allow_html=True)
+            hdr_c4.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>SÍMBOLO</span>", unsafe_allow_html=True)
+            hdr_c5.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>RESULTADO ($)</span>", unsafe_allow_html=True)
+            hdr_c6.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>% REND.</span>", unsafe_allow_html=True)
+            hdr_c7.markdown("<span style='color:var(--text-muted); font-size:11px; font-weight:700; font-family:JetBrains Mono;'>ESTADO / CAPTURAS</span>", unsafe_allow_html=True)
             
-            st.markdown("<hr style='margin: 6px 0 10px 0; border-color: #282D3C;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 6px 0 10px 0; border-color: var(--border-light);'>", unsafe_allow_html=True)
 
             list_sessions = df_filtered_tab4.to_dict("records")
             
@@ -1553,12 +1648,12 @@ with tab_trades:
                 
                 if clasif == "WIN":
                     badge = f"🟩 WIN ({num_caps})"
-                    res_html = f"<span class='green-text'>+${res_num:,.2f}</span>"
-                    pct_html = f"<span class='green-text'>+{pct_num:.2f}%</span>"
+                    res_html = f"<span class='color-win'>+${res_num:,.2f}</span>"
+                    pct_html = f"<span class='color-win'>+{pct_num:.2f}%</span>"
                 elif clasif == "LOSS":
                     badge = f"🟥 LOSS ({num_caps})"
-                    res_html = f"<span class='red-text'>-${abs(res_num):,.2f}</span>"
-                    pct_html = f"<span class='red-text'>{pct_num:.2f}%</span>"
+                    res_html = f"<span class='color-loss'>-${abs(res_num):,.2f}</span>"
+                    pct_html = f"<span class='color-loss'>{pct_num:.2f}%</span>"
                 else:
                     badge = f"⚪ BE ({num_caps})"
                     res_html = f"<span>${res_num:,.2f}</span>"
@@ -1569,13 +1664,13 @@ with tab_trades:
                 c1, c2, c3, c4, c5, c6, c7 = st.columns([1.0, 1.5, 1.1, 1.2, 1.2, 1.0, 1.5])
                 
                 with c1:
-                    st.markdown(f"<span style='font-size:13px;'>{f_str}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:13px; font-family:JetBrains Mono;'>{f_str}</span>", unsafe_allow_html=True)
                 with c2:
                     st.markdown(f"<span style='font-size:13px; font-weight:600;'>{acc_name}</span>", unsafe_allow_html=True)
                 with c3:
-                    st.markdown(f"<code style='background:#1A1E29; color:#A3A6AF; padding:2px 6px; border-radius:4px;'>#{acc_id_str}</code>", unsafe_allow_html=True)
+                    st.markdown(f"<code style='background:var(--bg-sec); color:var(--text-muted); padding:2px 6px; border-radius:4px; font-family:JetBrains Mono;'>#{acc_id_str}</code>", unsafe_allow_html=True)
                 with c4:
-                    st.markdown(f"<span style='font-size:12px; font-weight:700; color:#2962FF;'>{simbolo_str}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:12px; font-weight:700; color:#06B6D4;'>{simbolo_str}</span>", unsafe_allow_html=True)
                 with c5:
                     st.markdown(res_html, unsafe_allow_html=True)
                 with c6:
@@ -1590,7 +1685,7 @@ with tab_trades:
                         raw_prof = sum([float(op.get("raw_profit", 0)) for op in matching_ops])
                         
                         if tot_comm > 0 or tot_swap != 0:
-                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
+                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** \vert{} Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
                         else:
                             st.info("ℹ️ Registro de sesión sin comisiones aplicadas.")
                             
@@ -1659,4 +1754,4 @@ with tab_trades:
                                 except Exception as ex_f:
                                     st.error(f"Error al guardar: {ex_f}")
                 
-                st.markdown("<hr style='margin: 4px 0; border-color: #1E222E;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 4px 0; border-color: var(--border-main);'>", unsafe_allow_html=True)
