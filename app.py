@@ -1827,11 +1827,79 @@ with tab_negocio:
                 <div class="kpi-meta color-muted">Tiempo medio a Payout: <span style="font-weight:700; color:white;">{t_med_ret:.0f} días</span></div>
             </div>
             """, unsafe_allow_html=True)
+            
+
+
+        # --- CÁLCULO DE CONTADORES DE ESTADO (KPIs) ---
+        total_fase1 = len([c for c in cuentas_raw if "fase 1" in str(c.get("estado", "")).lower() or "phase 1" in str(c.get("estado", "")).lower()])
+        total_fase2 = len([c for c in cuentas_raw if "fase 2" in str(c.get("estado", "")).lower() or "phase 2" in str(c.get("estado", "")).lower()])
+        
+        total_aprobadas = 0
+        total_quemadas = 0
+        
+        for c in cuentas_raw:
+            id_c = str(c["account_number"])
+            obj = float(c.get("objetivo_profit", 0.0))
+            limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
+            estado_txt = str(c.get("estado", "")).lower()
+            
+            f_meta = obtener_fecha_meta_alcanzada(id_c, obj)
+            f_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+            
+            if "breached" in estado_txt or "quemada" in estado_txt or "eliminada" in estado_txt or f_breach:
+                total_quemadas += 1
+            elif f_meta or "fondeada" in estado_txt or "funded" in estado_txt:
+                total_aprobadas += 1
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 2. RENDERIZADO DE TARJETAS KPI COMERCIALES (Ampliadas con contadores)
+        kpi_b1, kpi_b2, kpi_b3, kpi_b4 = st.columns(4)
+        
+        with kpi_b1:
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid #F43F5E;">
+                <div class="kpi-header"><span>Gasto Total</span><i class="fa-solid fa-credit-card"></i></div>
+                <div class="kpi-value" style="color: #F43F5E;">${gasto_total:,.2f}</div>
+                <div class="kpi-meta color-muted">Total de {total_evaluaciones} cuentas operadas</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with kpi_b2:
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid #10B981;">
+                <div class="kpi-header"><span>Retiros Netos (Pagados)</span><i class="fa-solid fa-money-bill-wave"></i></div>
+                <div class="kpi-value" style="color: #10B981;">${retiros_netos_trader:,.2f}</div>
+                <div class="kpi-meta color-muted">De ${retiros_brutos:,.0f} brutos generados</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with kpi_b3:
+            clase_color = "#10B981" if flujo_caja_neto >= 0 else "#F43F5E"
+            signo_flujo = "+" if flujo_caja_neto > 0 else ""
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid {clase_color};">
+                <div class="kpi-header"><span>Flujo Neto / ROI Real</span><i class="fa-solid fa-sack-dollar"></i></div>
+                <div class="kpi-value" style="color: {clase_color};">{signo_flujo}${flujo_caja_neto:,.2f}</div>
+                <div class="kpi-meta" style="color:{clase_color}; font-weight:700;">WR Fondeo: {win_rate_evaluaciones:.1f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with kpi_b4:
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid var(--blue-accent);">
+                <div class="kpi-header"><span>Estado de Evaluaciones</span><i class="fa-solid fa-chart-pie"></i></div>
+                <div class="kpi-value" style="color: white; font-size: 18px;">🔥 {total_quemadas} quemadas | ✅ {total_aprobadas} pasadas</div>
+                <div class="kpi-meta color-muted">
+                    Fase 1: <span style="color:white; font-weight:700;">{total_fase1}</span> | Fase 2: <span style="color:white; font-weight:700;">{total_fase2}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.divider()
         st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
         
-        # --- DISEÑO DE LA NUEVA TABLA HTML (AUTOCONTENIDO) ---
+        # --- DISEÑO DE LA NUEVA TABLA HTML (SIN ANIMACIONES MOLESTAS) ---
         html_table = """
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -1972,7 +2040,8 @@ with tab_negocio:
                     else:
                         dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
                 else:
-                    dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-spinner fa-spin'></i> En progreso...</span>"
+                    # SIN ANIMACIÓN SPIN: Icono estático y limpio
+                    dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-clock'></i> En progreso...</span>"
             
             if neto_cuenta > 0:
                 flujo_str = f"<span class='val-pos'>+${neto_cuenta:,.2f}</span>"
