@@ -1829,7 +1829,7 @@ with tab_negocio:
             """, unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Cuenta")
+        st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
         
         datos_tabla_negocio = []
         for c in cuentas_raw:
@@ -1843,7 +1843,14 @@ with tab_negocio:
             
             retiros_brutos_cuenta = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()])
             neto_cuenta = (retiros_brutos_cuenta * 0.80) - costo
-            roi_cuenta = (neto_cuenta / costo * 100) if costo > 0 else 0
+            
+            # Lógica corregida para el ROI cuando el costo es $0 (Fases 2 o Fondeadas)
+            if costo > 0:
+                roi_str = f"{(neto_cuenta / costo * 100):+.2f}%"
+            elif costo == 0 and neto_cuenta > 0:
+                roi_str = "∞ (Puro Beneficio)"
+            else:
+                roi_str = "-"
             
             fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
             fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
@@ -1869,20 +1876,19 @@ with tab_negocio:
                 "Firma / ID": f"{nombre} (#{id_c})",
                 "Estado": estado_display,
                 "Línea de Tiempo": dias_str,
-                "Costo ($)": costo,
-                "Retirado ($)": retiros_brutos_cuenta * 0.80,
-                "Flujo Neto ($)": neto_cuenta,
-                "ROI (%)": roi_cuenta
+                "Costo ($)": f"${costo:,.2f}",
+                "Retirado ($)": f"${(retiros_brutos_cuenta * 0.80):,.2f}",
+                "Flujo Neto ($)": neto_cuenta, # Mantenemos numérico para colorear
+                "ROI": roi_str
             })
             
         df_negocio = pd.DataFrame(datos_tabla_negocio)
+        
+        # Format customizado para pintar el flujo neto
         st.dataframe(
             df_negocio.style.format({
-                "Costo ($)": "${:,.2f}",
-                "Retirado ($)": "${:,.2f}",
-                "Flujo Neto ($)": "${:,.2f}",
-                "ROI (%)": "{:+.2f}%"
-            }).map(lambda x: 'color: #10B981; font-weight:bold;' if x > 0 else ('color: #F43F5E;' if x < 0 else ''), subset=['Flujo Neto ($)', 'ROI (%)']),
+                "Flujo Neto ($)": "${:,.2f}"
+            }).map(lambda x: 'color: #10B981; font-weight:bold;' if x > 0 else ('color: #F43F5E;' if x < 0 else ''), subset=['Flujo Neto ($)']),
             use_container_width=True,
             hide_index=True
         )
