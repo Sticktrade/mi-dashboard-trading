@@ -528,30 +528,19 @@ def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
 
 @st.dialog("📝 Editar Datos Comerciales", width="large")
 def modal_editar_datos_negocio(cuentas_raw_list):
-    st.markdown("Modifica los costos y fechas haciendo clic directamente en las celdas (como en Excel). El sistema usará esto junto con tus trades para detectar tu rentabilidad real.")
+    st.markdown("Solo ingresa el costo y la fecha de compra/inicio. El sistema detectará automáticamente cuándo alcanzaste tu objetivo o límite de pérdida leyendo tu historial de MetaTrader.")
     
     datos_edicion = []
     for c in cuentas_raw_list:
         fc = c.get("fecha_compra")
-        f2 = c.get("fecha_fase2")
-        ff = c.get("fecha_fondeo")
-        
         try: fc_date = datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d").date() if fc else None
         except: fc_date = None
-        
-        try: f2_date = datetime.datetime.strptime(str(f2)[:10], "%Y-%m-%d").date() if f2 else None
-        except: f2_date = None
-        
-        try: ff_date = datetime.datetime.strptime(str(ff)[:10], "%Y-%m-%d").date() if ff else None
-        except: ff_date = None
 
         datos_edicion.append({
             "account_number": str(c["account_number"]),
             "nombre_cuenta": c.get("nombre_cuenta", "Cuenta"),
             "costo_inscripcion": float(c.get("costo_inscripcion") or 0.0),
-            "fecha_compra": fc_date,
-            "fecha_fase2": f2_date,
-            "fecha_fondeo": ff_date
+            "fecha_compra": fc_date
         })
         
     df_edit = pd.DataFrame(datos_edicion)
@@ -560,11 +549,9 @@ def modal_editar_datos_negocio(cuentas_raw_list):
         df_edit,
         column_config={
             "account_number": st.column_config.TextColumn("ID", disabled=True),
-            "nombre_cuenta": st.column_config.TextColumn("Firma", disabled=True),
+            "nombre_cuenta": st.column_config.TextColumn("Firma / Fase", disabled=True),
             "costo_inscripcion": st.column_config.NumberColumn("Costo ($)", min_value=0.0, format="$%.2f", step=1.0),
-            "fecha_compra": st.column_config.DateColumn("Compra"),
-            "fecha_fase2": st.column_config.DateColumn("Pase a F2"),
-            "fecha_fondeo": st.column_config.DateColumn("Fondeo"),
+            "fecha_compra": st.column_config.DateColumn("Fecha Compra / Inicio"),
         },
         hide_index=True,
         use_container_width=True,
@@ -579,14 +566,11 @@ def modal_editar_datos_negocio(cuentas_raw_list):
                 for index, row in edited_df.iterrows():
                     acc_id = row["account_number"]
                     update_data = {"costo_inscripcion": float(row["costo_inscripcion"])}
-                    
                     update_data["fecha_compra"] = row["fecha_compra"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_compra"]) else None
-                    update_data["fecha_fase2"] = row["fecha_fase2"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_fase2"]) else None
-                    update_data["fecha_fondeo"] = row["fecha_fondeo"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_fondeo"]) else None
                         
                     supabase.table("cuentas").update(update_data).eq("account_number", acc_id).execute()
                     
-                st.success("¡Datos comerciales guardados correctamente!")
+                st.success("¡Datos guardados correctamente!")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as e:
