@@ -1966,6 +1966,7 @@ with tab_negocio:
         """
         
         st.markdown(html_table, unsafe_allow_html=True)
+        
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
