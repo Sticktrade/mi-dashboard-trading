@@ -528,7 +528,7 @@ def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
 
 @st.dialog("📝 Editar Datos Comerciales", width="large")
 def modal_editar_datos_negocio(cuentas_raw_list):
-    st.markdown("Solo ingresa el costo y la fecha de compra/inicio. El sistema detectará automáticamente cuándo alcanzaste tu objetivo o límite de pérdida leyendo tu historial de MetaTrader.")
+    st.markdown("**Regla de oro:** Pon el costo real SÓLO en la Fase 1. Para Fase 2 y Fondeadas pon **$0.00**. En las fechas, pon el día que empezaste a operar esa cuenta específica.")
     
     datos_edicion = []
     for c in cuentas_raw_list:
@@ -550,8 +550,8 @@ def modal_editar_datos_negocio(cuentas_raw_list):
         column_config={
             "account_number": st.column_config.TextColumn("ID", disabled=True),
             "nombre_cuenta": st.column_config.TextColumn("Firma / Fase", disabled=True),
-            "costo_inscripcion": st.column_config.NumberColumn("Costo ($)", min_value=0.0, format="$%.2f", step=0.01),
-            "fecha_compra": st.column_config.DateColumn("Fecha Compra / Inicio"),
+            "costo_inscripcion": st.column_config.NumberColumn("Costo (Solo F1)", min_value=0.0, format="$%.2f", step=0.01),
+            "fecha_compra": st.column_config.DateColumn("Fecha Inicio de Fase"),
         },
         hide_index=True,
         use_container_width=True,
@@ -567,7 +567,6 @@ def modal_editar_datos_negocio(cuentas_raw_list):
                     acc_id = row["account_number"]
                     update_data = {"costo_inscripcion": float(row["costo_inscripcion"])}
                     
-                    # Validación segura de fecha (si es objeto o si ya es texto)
                     fecha_val = row["fecha_compra"]
                     if pd.notnull(fecha_val) and str(fecha_val).strip() not in ["", "None", "NaT"]:
                         if hasattr(fecha_val, 'strftime'):
