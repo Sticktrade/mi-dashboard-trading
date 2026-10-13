@@ -550,7 +550,8 @@ def modal_editar_datos_negocio(cuentas_raw_list):
         column_config={
             "account_number": st.column_config.TextColumn("ID", disabled=True),
             "nombre_cuenta": st.column_config.TextColumn("Firma / Fase", disabled=True),
-            "costo_inscripcion": st.column_config.NumberColumn("Costo ($)", min_value=0.0, format="$%.2f", step=1.0),
+            # AQUÍ ESTÁ EL CAMBIO: step=0.01 permite usar decimales
+            "costo_inscripcion": st.column_config.NumberColumn("Costo ($)", min_value=0.0, format="$%.2f", step=0.01),
             "fecha_compra": st.column_config.DateColumn("Fecha Compra / Inicio"),
         },
         hide_index=True,
