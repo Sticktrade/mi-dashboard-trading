@@ -1831,13 +1831,63 @@ with tab_negocio:
         st.divider()
         st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
         
-        # --- DISEÑO DE LA NUEVA TABLA HTML ---
+        # --- DISEÑO DE LA NUEVA TABLA HTML (AUTOCONTENIDO) ---
         html_table = """
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+        
         <style>
-        .roi-table-container { background-color: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; overflow-x: auto; margin-top: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .roi-table { width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; text-align: left; }
-        .roi-table th { background-color: var(--bg-sec); color: var(--text-muted); padding: 14px 16px; font-size: 11px; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border-main); white-space: nowrap; letter-spacing: 0.5px; }
-        .roi-table td { padding: 16px 16px; border-bottom: 1px solid var(--border-main); color: var(--text-main); font-size: 13px; vertical-align: middle; white-space: nowrap; }
+        :root {
+            --primary-color: #2962FF; 
+            --bg-main: #0B0E14; 
+            --bg-sec: #111622;
+            --bg-card: #161D2E; 
+            --border-main: #1E293B; 
+            --border-light: #2D384D;
+            --text-main: #E2E8F0; 
+            --text-muted: #94A3B8; 
+            --win-color: #10B981;
+            --loss-color: #F43F5E; 
+        }
+        body { 
+            margin: 0; 
+            padding: 4px; 
+            background-color: var(--bg-main); 
+            color: var(--text-main); 
+            font-family: 'Inter', sans-serif; 
+        }
+        .roi-table-container { 
+            background-color: var(--bg-card); 
+            border: 1px solid var(--border-light); 
+            border-radius: 12px; 
+            overflow-x: auto; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
+        }
+        .roi-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-family: 'Inter', sans-serif; 
+            text-align: left; 
+        }
+        .roi-table th { 
+            background-color: var(--bg-sec); 
+            color: var(--text-muted); 
+            padding: 14px 16px; 
+            font-size: 11px; 
+            text-transform: uppercase; 
+            font-weight: 700; 
+            border-bottom: 1px solid var(--border-main); 
+            white-space: nowrap; 
+            letter-spacing: 0.5px; 
+        }
+        .roi-table td { 
+            padding: 16px 16px; 
+            border-bottom: 1px solid var(--border-main); 
+            color: var(--text-main); 
+            font-size: 13px; 
+            vertical-align: middle; 
+            white-space: nowrap; 
+        }
         .roi-table tbody tr:last-child td { border-bottom: none; }
         .roi-table tbody tr:hover { background-color: rgba(255,255,255,0.02); }
         
@@ -1846,12 +1896,13 @@ with tab_negocio:
         .b-breached { background: rgba(244,63,94,0.15); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
         .b-challenge { background: rgba(41,98,255,0.15); color: #2962FF; border: 1px solid rgba(41,98,255,0.2); }
         
-        .val-pos { color: #10B981; font-weight: 800; font-family: 'JetBrains Mono', monospace;}
-        .val-neg { color: #F43F5E; font-weight: 800; font-family: 'JetBrains Mono', monospace;}
-        .val-neutral { color: var(--text-muted); font-family: 'JetBrains Mono', monospace;}
-        .tl-text { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; }
-        .acc-name { font-weight: 700; font-size: 14px; }
+        .val-pos { color: #10B981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+        .val-neg { color: #F43F5E; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+        .val-neutral { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+        .tl-text { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: var(--text-main); }
+        .acc-name { font-weight: 700; font-size: 14px; color: var(--text-main); }
         .acc-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); background: var(--bg-main); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-light); margin-left: 8px; }
+        .num-cell { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-main); }
         </style>
         
         <div class="roi-table-container">
@@ -1888,17 +1939,14 @@ with tab_negocio:
             fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
             fecha_breach_auto = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
             
-            # --- 1. LÓGICA DE ESTADO Y FECHA DE BREACH (Auto y Manual) ---
             fecha_breach_final = fecha_breach_auto
             
-            # Si la marcaste manual pero no saltó el límite automático, buscamos la fecha de tu último trade
             if es_breached_manual and not fecha_breach_auto:
                 ops_acc = [op for op in ops_raw if str(op.get("account_number")).strip() == id_c.strip()]
                 if ops_acc:
                     ops_acc.sort(key=lambda x: str(x.get("fecha", "")), reverse=True)
                     fecha_breach_final = str(ops_acc[0].get("fecha"))[:10]
             
-            # --- 2. LÓGICA DE LA LÍNEA DE TIEMPO (TIMELINE) ---
             if fecha_breach_final or es_breached_manual:
                 fecha_mostrar = fecha_breach_final if fecha_breach_final else "Desconocida"
                 dias_str = f"<span class='tl-text' style='color:#F43F5E;'><i class='fa-solid fa-skull-crossbones'></i> Breached el {fecha_mostrar}</span>"
@@ -1906,7 +1954,6 @@ with tab_negocio:
                 estado_lbl = "Breached"
                 
             elif es_fondeada:
-                # Fondeada pura: ignoramos si llegó a un objetivo, solo mostramos que está activa
                 dias_str = f"<span class='tl-text' style='color:#10B981;'><i class='fa-solid fa-star'></i> Cuenta Real Activa</span>"
                 badge_cls = "b-funded"
                 estado_lbl = "Funded"
@@ -1927,7 +1974,6 @@ with tab_negocio:
                 else:
                     dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-spinner fa-spin'></i> En progreso...</span>"
             
-            # --- 3. LÓGICA DE COLORES PARA EL FLUJO NETO ---
             if neto_cuenta > 0:
                 flujo_str = f"<span class='val-pos'>+${neto_cuenta:,.2f}</span>"
             elif neto_cuenta < 0:
@@ -1935,7 +1981,6 @@ with tab_negocio:
             else:
                 flujo_str = f"<span class='val-neutral'>$0.00</span>"
                 
-            # --- 4. LÓGICA DE COLORES PARA EL ROI ---
             if costo > 0:
                 roi_val = (neto_cuenta / costo) * 100
                 if roi_val > 0: roi_str = f"<span class='val-pos'>+{roi_val:,.2f}%</span>"
@@ -1946,14 +1991,13 @@ with tab_negocio:
             else:
                 roi_str = "<span class='val-neutral'>-</span>"
                 
-            # Renderizado de la fila
             html_table += f"""
                 <tr>
                     <td><span class='acc-name'>{nombre}</span><span class='acc-id'>#{id_c}</span></td>
                     <td><span class='badge-estado {badge_cls}'>{estado_lbl}</span></td>
                     <td>{dias_str}</td>
-                    <td style="font-family: 'JetBrains Mono', monospace; font-size:13px;">${costo:,.2f}</td>
-                    <td style="font-family: 'JetBrains Mono', monospace; font-size:13px;">${(retiros_brutos_cuenta * 0.80):,.2f}</td>
+                    <td class="num-cell">${costo:,.2f}</td>
+                    <td class="num-cell">${(retiros_brutos_cuenta * 0.80):,.2f}</td>
                     <td>{flujo_str}</td>
                     <td>{roi_str}</td>
                 </tr>
@@ -1965,7 +2009,6 @@ with tab_negocio:
         </div>
         """
         
-        # Usamos st.components.v1.html para renderizar el diseño completo sin que se imprima como texto
         st.components.v1.html(html_table, height=450, scrolling=True)
         
 # =============================================================================
