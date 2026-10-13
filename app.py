@@ -1965,7 +1965,8 @@ with tab_negocio:
         </div>
         """
         
-        st.markdown(html_table, unsafe_allow_html=True)
+        # Usamos st.components.v1.html para renderizar el diseño completo sin que se imprima como texto
+        st.components.v1.html(html_table, height=450, scrolling=True)
         
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
