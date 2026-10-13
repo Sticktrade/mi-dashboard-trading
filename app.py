@@ -1831,68 +1831,141 @@ with tab_negocio:
         st.divider()
         st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
         
-        datos_tabla_negocio = []
+        # --- DISEÑO DE LA NUEVA TABLA HTML ---
+        html_table = """
+        <style>
+        .roi-table-container { background-color: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; overflow-x: auto; margin-top: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .roi-table { width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; text-align: left; }
+        .roi-table th { background-color: var(--bg-sec); color: var(--text-muted); padding: 14px 16px; font-size: 11px; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border-main); white-space: nowrap; letter-spacing: 0.5px; }
+        .roi-table td { padding: 16px 16px; border-bottom: 1px solid var(--border-main); color: var(--text-main); font-size: 13px; vertical-align: middle; white-space: nowrap; }
+        .roi-table tbody tr:last-child td { border-bottom: none; }
+        .roi-table tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+        
+        .badge-estado { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
+        .b-funded { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
+        .b-breached { background: rgba(244,63,94,0.15); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
+        .b-challenge { background: rgba(41,98,255,0.15); color: #2962FF; border: 1px solid rgba(41,98,255,0.2); }
+        
+        .val-pos { color: #10B981; font-weight: 800; font-family: 'JetBrains Mono', monospace;}
+        .val-neg { color: #F43F5E; font-weight: 800; font-family: 'JetBrains Mono', monospace;}
+        .val-neutral { color: var(--text-muted); font-family: 'JetBrains Mono', monospace;}
+        .tl-text { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; }
+        .acc-name { font-weight: 700; font-size: 14px; }
+        .acc-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); background: var(--bg-main); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-light); margin-left: 8px; }
+        </style>
+        
+        <div class="roi-table-container">
+            <table class="roi-table">
+                <thead>
+                    <tr>
+                        <th>Firma / Fase</th>
+                        <th>Estado</th>
+                        <th>Línea de Tiempo</th>
+                        <th>Costo</th>
+                        <th>Retirado</th>
+                        <th>Flujo Neto</th>
+                        <th>ROI</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
         for c in cuentas_raw:
             id_c = str(c["account_number"])
             nombre = c.get("nombre_cuenta", "Desconocida")
-            estado = c.get("estado", "Desconocido")
+            estado = str(c.get("estado", "Desconocido")).lower()
             costo = float(c.get("costo_inscripcion") or 0.0)
             fc = c.get("fecha_compra")
             obj = float(c.get("objetivo_profit", 0.0))
             limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
             
+            es_fondeada = "fondeada" in estado or "funded" in estado
+            es_breached_manual = "breached" in estado or "quemada" in estado or "eliminada" in estado
+            
             retiros_brutos_cuenta = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()])
             neto_cuenta = (retiros_brutos_cuenta * 0.80) - costo
             
-            # Lógica corregida para el ROI cuando el costo es $0 (Fases 2 o Fondeadas)
-            if costo > 0:
-                roi_str = f"{(neto_cuenta / costo * 100):+.2f}%"
-            elif costo == 0 and neto_cuenta > 0:
-                roi_str = "∞ (Puro Beneficio)"
-            else:
-                roi_str = "-"
-            
             fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
-            fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+            fecha_breach_auto = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
             
-            dias_str = "-"
-            estado_display = estado.capitalize()
+            # --- 1. LÓGICA DE ESTADO Y FECHA DE BREACH (Auto y Manual) ---
+            fecha_breach_final = fecha_breach_auto
             
-            if fecha_breach:
-                estado_display = "Breached (Auto)"
-                if fc:
-                    try: 
-                        d_b = (datetime.datetime.strptime(fecha_breach, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                        if d_b >= 0: dias_str = f"Perdida en {d_b} d."
-                    except: pass
-            elif fecha_meta:
-                if fc:
-                    try: 
-                        d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                        if d_p >= 0: dias_str = f"Aprobada en {d_p} d."
-                    except: pass
+            # Si la marcaste manual pero no saltó el límite automático, buscamos la fecha de tu último trade
+            if es_breached_manual and not fecha_breach_auto:
+                ops_acc = [op for op in ops_raw if str(op.get("account_number")).strip() == id_c.strip()]
+                if ops_acc:
+                    ops_acc.sort(key=lambda x: str(x.get("fecha", "")), reverse=True)
+                    fecha_breach_final = str(ops_acc[0].get("fecha"))[:10]
             
-            datos_tabla_negocio.append({
-                "Firma / ID": f"{nombre} (#{id_c})",
-                "Estado": estado_display,
-                "Línea de Tiempo": dias_str,
-                "Costo ($)": f"${costo:,.2f}",
-                "Retirado ($)": f"${(retiros_brutos_cuenta * 0.80):,.2f}",
-                "Flujo Neto ($)": neto_cuenta, # Mantenemos numérico para colorear
-                "ROI": roi_str
-            })
+            # --- 2. LÓGICA DE LA LÍNEA DE TIEMPO (TIMELINE) ---
+            if fecha_breach_final or es_breached_manual:
+                fecha_mostrar = fecha_breach_final if fecha_breach_final else "Desconocida"
+                dias_str = f"<span class='tl-text' style='color:#F43F5E;'><i class='fa-solid fa-skull-crossbones'></i> Breached el {fecha_mostrar}</span>"
+                badge_cls = "b-breached"
+                estado_lbl = "Breached"
+                
+            elif es_fondeada:
+                # Fondeada pura: ignoramos si llegó a un objetivo, solo mostramos que está activa
+                dias_str = f"<span class='tl-text' style='color:#10B981;'><i class='fa-solid fa-star'></i> Cuenta Real Activa</span>"
+                badge_cls = "b-funded"
+                estado_lbl = "Funded"
+                
+            else:
+                badge_cls = "b-challenge"
+                estado_lbl = "Challenge"
+                
+                if fecha_meta:
+                    if fc:
+                        try:
+                            d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                            dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta} <span style='color:var(--text-muted); font-size:11px;'>({d_p} d.)</span></span>"
+                        except:
+                            dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
+                    else:
+                        dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
+                else:
+                    dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-spinner fa-spin'></i> En progreso...</span>"
             
-        df_negocio = pd.DataFrame(datos_tabla_negocio)
+            # --- 3. LÓGICA DE COLORES PARA EL FLUJO NETO ---
+            if neto_cuenta > 0:
+                flujo_str = f"<span class='val-pos'>+${neto_cuenta:,.2f}</span>"
+            elif neto_cuenta < 0:
+                flujo_str = f"<span class='val-neg'>-${abs(neto_cuenta):,.2f}</span>"
+            else:
+                flujo_str = f"<span class='val-neutral'>$0.00</span>"
+                
+            # --- 4. LÓGICA DE COLORES PARA EL ROI ---
+            if costo > 0:
+                roi_val = (neto_cuenta / costo) * 100
+                if roi_val > 0: roi_str = f"<span class='val-pos'>+{roi_val:,.2f}%</span>"
+                elif roi_val < 0: roi_str = f"<span class='val-neg'>{roi_val:,.2f}%</span>"
+                else: roi_str = "<span class='val-neutral'>0.00%</span>"
+            elif costo == 0 and neto_cuenta > 0:
+                roi_str = f"<span class='val-pos'>∞ <span style='font-size:10px; color:var(--text-muted); font-family:Inter;'>(Puro Beneficio)</span></span>"
+            else:
+                roi_str = "<span class='val-neutral'>-</span>"
+                
+            # Renderizado de la fila
+            html_table += f"""
+                <tr>
+                    <td><span class='acc-name'>{nombre}</span><span class='acc-id'>#{id_c}</span></td>
+                    <td><span class='badge-estado {badge_cls}'>{estado_lbl}</span></td>
+                    <td>{dias_str}</td>
+                    <td style="font-family: 'JetBrains Mono', monospace; font-size:13px;">${costo:,.2f}</td>
+                    <td style="font-family: 'JetBrains Mono', monospace; font-size:13px;">${(retiros_brutos_cuenta * 0.80):,.2f}</td>
+                    <td>{flujo_str}</td>
+                    <td>{roi_str}</td>
+                </tr>
+            """
+            
+        html_table += """
+                </tbody>
+            </table>
+        </div>
+        """
         
-        # Format customizado para pintar el flujo neto
-        st.dataframe(
-            df_negocio.style.format({
-                "Flujo Neto ($)": "${:,.2f}"
-            }).map(lambda x: 'color: #10B981; font-weight:bold;' if x > 0 else ('color: #F43F5E;' if x < 0 else ''), subset=['Flujo Neto ($)']),
-            use_container_width=True,
-            hide_index=True
-        )
-        
+        st.markdown(html_table, unsafe_allow_html=True)
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
