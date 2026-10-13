@@ -550,7 +550,6 @@ def modal_editar_datos_negocio(cuentas_raw_list):
         column_config={
             "account_number": st.column_config.TextColumn("ID", disabled=True),
             "nombre_cuenta": st.column_config.TextColumn("Firma / Fase", disabled=True),
-            # AQUÍ ESTÁ EL CAMBIO: step=0.01 permite usar decimales
             "costo_inscripcion": st.column_config.NumberColumn("Costo ($)", min_value=0.0, format="$%.2f", step=0.01),
             "fecha_compra": st.column_config.DateColumn("Fecha Compra / Inicio"),
         },
@@ -567,7 +566,16 @@ def modal_editar_datos_negocio(cuentas_raw_list):
                 for index, row in edited_df.iterrows():
                     acc_id = row["account_number"]
                     update_data = {"costo_inscripcion": float(row["costo_inscripcion"])}
-                    update_data["fecha_compra"] = row["fecha_compra"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_compra"]) else None
+                    
+                    # Validación segura de fecha (si es objeto o si ya es texto)
+                    fecha_val = row["fecha_compra"]
+                    if pd.notnull(fecha_val) and str(fecha_val).strip() not in ["", "None", "NaT"]:
+                        if hasattr(fecha_val, 'strftime'):
+                            update_data["fecha_compra"] = fecha_val.strftime("%Y-%m-%d")
+                        else:
+                            update_data["fecha_compra"] = str(fecha_val)[:10]
+                    else:
+                        update_data["fecha_compra"] = None
                         
                     supabase.table("cuentas").update(update_data).eq("account_number", acc_id).execute()
                     
