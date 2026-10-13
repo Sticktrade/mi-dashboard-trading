@@ -1713,327 +1713,303 @@ with tab_estado_analytics:
 # =============================================================================
 with tab_negocio:
     st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-briefcase' style='color:var(--blue-accent); margin-right:6px;'></i> Flujo de Caja y Rentabilidad Real (ROI)</h3>", unsafe_allow_html=True)
-    st.caption("Esta sección mide tu trading como un negocio: Costos de evaluación vs. Retiros netos reales en tu bolsillo.")
+    st.caption("Usa el filtro para excluir cuentas gratuitas o de prueba y mantener la métrica de tu negocio real intacta.")
     
-    col_btn1, col_btn2 = st.columns([1, 3])
-    with col_btn1:
-        if st.button("✏️ Ingresar Costos y Fechas", use_container_width=True):
-            if cuentas_raw:
-                modal_editar_datos_negocio(cuentas_raw)
-            else:
-                st.warning("No hay cuentas cargadas.")
-                
     if not cuentas_raw:
         st.info("No hay cuentas en la base de datos para calcular las métricas comerciales.")
     else:
-        # --- CÁLCULO DE MÉTRICAS COMERCIALES GLOBALES ---
-        gasto_total = sum([float(c.get("costo_inscripcion") or 0.0) for c in cuentas_raw])
+        # --- 1. FILTRO DINÁMICO POR FIRMA ---
+        firmas_unicas = sorted(list(set([c.get("nombre_cuenta", "Desconocida") for c in cuentas_raw])))
         
-        ops_retiros = [op for op in ops_raw if "WITHDRAWAL" in str(op.get("tipo", "")).upper()]
-        retiros_brutos = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros])
-        retiros_netos_trader = retiros_brutos * 0.80 
-        
-        flujo_caja_neto = retiros_netos_trader - gasto_total
-        roi_real = (flujo_caja_neto / gasto_total * 100) if gasto_total > 0 else 0
-        
-        total_evaluaciones = len(cuentas_raw)
-        cuentas_fondeadas_historicas = [c for c in cuentas_raw if "fondeada" in str(c.get("estado", "")).lower() or "funded" in str(c.get("estado", "")).lower()]
-        win_rate_evaluaciones = (len(cuentas_fondeadas_historicas) / total_evaluaciones * 100) if total_evaluaciones > 0 else 0
-        
-        # --- CÁLCULO DINÁMICO DE TIEMPOS Y AUTODETECCIÓN ---
-        tiempos_fases = []
-        tiempos_retiro = []
-        tiempos_breach = []
-        
-        for c in cuentas_raw:
-            id_c = str(c["account_number"])
-            obj = float(c.get("objetivo_profit", 0.0))
-            limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0) 
-            fc = c.get("fecha_compra")
-            ff = c.get("fecha_fondeo")
-            estado = str(c.get("estado", "")).lower()
+        col_btn, col_filter = st.columns([1, 2])
+        with col_btn:
+            if st.button("✏️ Ingresar Costos y Fechas", use_container_width=True):
+                modal_editar_datos_negocio(cuentas_raw)
+        with col_filter:
+            firmas_seleccionadas = st.multiselect(
+                "🔍 Filtrar cuentas (Elimina las gratuitas para limpiar tus métricas)",
+                options=firmas_unicas,
+                default=firmas_unicas
+            )
             
-            # Autodetecciones
-            fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
-            fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+        # Creamos una lista filtrada según lo que hayas seleccionado
+        cuentas_filtradas = [c for c in cuentas_raw if c.get("nombre_cuenta", "Desconocida") in firmas_seleccionadas]
+        
+        if not cuentas_filtradas:
+            st.warning("No hay cuentas que coincidan con el filtro seleccionado. Selecciona al menos una firma.")
+        else:
+            # --- 2. CÁLCULO DE MÉTRICAS COMERCIALES GLOBALES (FILTRADAS) ---
+            ids_filtrados = [str(c["account_number"]).strip() for c in cuentas_filtradas]
             
-            # 1. ¿Cuánto tardaste en perderla?
-            if fecha_breach and fc:
-                try:
-                    dias_breach = (datetime.datetime.strptime(fecha_breach, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                    if dias_breach >= 0: tiempos_breach.append(dias_breach)
-                except: pass
-
-            # 2. ¿Cuánto tardaste en pasar la fase? (solo si no se quemó)
-            elif fecha_meta and fc and not fecha_breach:
-                try:
-                    dias_fase = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                    if dias_fase >= 0: tiempos_fases.append(dias_fase)
-                except: pass
-
-            # 3. ¿Cuánto tardaste en el primer retiro?
-            if ("fondeada" in estado or "funded" in estado) and not fecha_breach:
-                ops_retiros_acc = [op for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()]
-                if ops_retiros_acc and ff:
-                    ops_retiros_acc.sort(key=lambda x: str(x.get("fecha", "")))
-                    primer_ret = str(ops_retiros_acc[0].get("fecha"))[:10]
+            gasto_total = sum([float(c.get("costo_inscripcion") or 0.0) for c in cuentas_filtradas])
+            
+            # Filtramos retiros para que SOLO cuenten los de las firmas seleccionadas
+            ops_retiros = [op for op in ops_raw if "WITHDRAWAL" in str(op.get("tipo", "")).upper() and str(op.get("account_number")).strip() in ids_filtrados]
+            retiros_brutos = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros])
+            retiros_netos_trader = retiros_brutos * 0.80 
+            
+            flujo_caja_neto = retiros_netos_trader - gasto_total
+            roi_real = (flujo_caja_neto / gasto_total * 100) if gasto_total > 0 else 0
+            
+            total_evaluaciones = len(cuentas_filtradas)
+            cuentas_fondeadas_historicas = [c for c in cuentas_filtradas if "fondeada" in str(c.get("estado", "")).lower() or "funded" in str(c.get("estado", "")).lower()]
+            win_rate_evaluaciones = (len(cuentas_fondeadas_historicas) / total_evaluaciones * 100) if total_evaluaciones > 0 else 0
+            
+            # --- CÁLCULO DINÁMICO DE TIEMPOS Y AUTODETECCIÓN ---
+            tiempos_fases = []
+            tiempos_retiro = []
+            tiempos_breach = []
+            
+            for c in cuentas_filtradas:
+                id_c = str(c["account_number"])
+                obj = float(c.get("objetivo_profit", 0.0))
+                limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0) 
+                fc = c.get("fecha_compra")
+                ff = c.get("fecha_fondeo")
+                estado = str(c.get("estado", "")).lower()
+                
+                fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
+                fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+                
+                if fecha_breach and fc:
                     try:
-                        dias_ret = (datetime.datetime.strptime(primer_ret, "%Y-%m-%d") - datetime.datetime.strptime(str(ff)[:10], "%Y-%m-%d")).days
-                        if dias_ret >= 0: tiempos_retiro.append(dias_ret)
+                        dias_breach = (datetime.datetime.strptime(fecha_breach, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                        if dias_breach >= 0: tiempos_breach.append(dias_breach)
                     except: pass
 
-        t_med_fase = sum(tiempos_fases) / len(tiempos_fases) if tiempos_fases else 0
-        t_med_ret = sum(tiempos_retiro) / len(tiempos_retiro) if tiempos_retiro else 0
-        t_med_breach = sum(tiempos_breach) / len(tiempos_breach) if tiempos_breach else 0
+                elif fecha_meta and fc and not fecha_breach:
+                    try:
+                        dias_fase = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                        if dias_fase >= 0: tiempos_fases.append(dias_fase)
+                    except: pass
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # --- CÁLCULO DE CONTADORES DE ESTADO (KPIs) ---
-        total_fase1 = len([c for c in cuentas_raw if "fase 1" in str(c.get("estado", "")).lower() or "phase 1" in str(c.get("estado", "")).lower()])
-        total_fase2 = len([c for c in cuentas_raw if "fase 2" in str(c.get("estado", "")).lower() or "phase 2" in str(c.get("estado", "")).lower()])
-        
-        total_aprobadas = 0
-        total_quemadas = 0
-        
-        for c in cuentas_raw:
-            id_c = str(c["account_number"])
-            limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
-            estado_txt = str(c.get("estado", "")).lower()
-            
-            f_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
-            
-            if "breached" in estado_txt or "quemada" in estado_txt or "eliminada" in estado_txt or f_breach:
-                total_quemadas += 1
-            # Corregido: Solo suma si explícitamente es fondeada
-            elif "fondeada" in estado_txt or "funded" in estado_txt:
-                total_aprobadas += 1
-
-        # 2. RENDERIZADO DE TARJETAS KPI COMERCIALES (Ampliadas con contadores)
-        kpi_b1, kpi_b2, kpi_b3, kpi_b4 = st.columns(4)
-        
-        with kpi_b1:
-            st.markdown(f"""
-            <div class="kpi-card" style="border-left: 4px solid #F43F5E;">
-                <div class="kpi-header"><span>Gasto Total</span><i class="fa-solid fa-credit-card"></i></div>
-                <div class="kpi-value" style="color: #F43F5E;">${gasto_total:,.2f}</div>
-                <div class="kpi-meta color-muted">Total de {total_evaluaciones} cuentas operadas</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with kpi_b2:
-            st.markdown(f"""
-            <div class="kpi-card" style="border-left: 4px solid #10B981;">
-                <div class="kpi-header"><span>Retiros Netos (Pagados)</span><i class="fa-solid fa-money-bill-wave"></i></div>
-                <div class="kpi-value" style="color: #10B981;">${retiros_netos_trader:,.2f}</div>
-                <div class="kpi-meta color-muted">De ${retiros_brutos:,.0f} brutos generados</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with kpi_b3:
-            clase_color = "#10B981" if flujo_caja_neto >= 0 else "#F43F5E"
-            signo_flujo = "+" if flujo_caja_neto > 0 else ""
-            st.markdown(f"""
-            <div class="kpi-card" style="border-left: 4px solid {clase_color};">
-                <div class="kpi-header"><span>Flujo Neto / ROI Real</span><i class="fa-solid fa-sack-dollar"></i></div>
-                <div class="kpi-value" style="color: {clase_color};">{signo_flujo}${flujo_caja_neto:,.2f}</div>
-                <div class="kpi-meta" style="color:{clase_color}; font-weight:700;">WR Fondeo: {win_rate_evaluaciones:.1f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with kpi_b4:
-            st.markdown(f"""
-            <div class="kpi-card" style="border-left: 4px solid var(--blue-accent);">
-                <div class="kpi-header"><span>Estado de Evaluaciones</span><i class="fa-solid fa-chart-pie"></i></div>
-                <div class="kpi-value" style="color: white; font-size: 18px;">🔥 {total_quemadas} quemadas | ✅ {total_aprobadas} fondeadas</div>
-                <div class="kpi-meta color-muted">
-                    Fase 1: <span style="color:white; font-weight:700;">{total_fase1}</span> | Fase 2: <span style="color:white; font-weight:700;">{total_fase2}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.divider()
-        st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
-        
-        # --- DISEÑO DE LA NUEVA TABLA HTML (SIN ANIMACIONES MOLESTAS) ---
-        html_table = """
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-        
-        <style>
-        :root {
-            --primary-color: #2962FF; 
-            --bg-main: #0B0E14; 
-            --bg-sec: #111622;
-            --bg-card: #161D2E; 
-            --border-main: #1E293B; 
-            --border-light: #2D384D;
-            --text-main: #E2E8F0; 
-            --text-muted: #94A3B8; 
-            --win-color: #10B981;
-            --loss-color: #F43F5E; 
-        }
-        body { 
-            margin: 0; 
-            padding: 4px; 
-            background-color: var(--bg-main); 
-            color: var(--text-main); 
-            font-family: 'Inter', sans-serif; 
-        }
-        .roi-table-container { 
-            background-color: var(--bg-card); 
-            border: 1px solid var(--border-light); 
-            border-radius: 12px; 
-            overflow-x: auto; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
-        }
-        .roi-table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            font-family: 'Inter', sans-serif; 
-            text-align: left; 
-        }
-        .roi-table th { 
-            background-color: var(--bg-sec); 
-            color: var(--text-muted); 
-            padding: 14px 16px; 
-            font-size: 11px; 
-            text-transform: uppercase; 
-            font-weight: 700; 
-            border-bottom: 1px solid var(--border-main); 
-            white-space: nowrap; 
-            letter-spacing: 0.5px; 
-        }
-        .roi-table td { 
-            padding: 16px 16px; 
-            border-bottom: 1px solid var(--border-main); 
-            color: var(--text-main); 
-            font-size: 13px; 
-            vertical-align: middle; 
-            white-space: nowrap; 
-        }
-        .roi-table tbody tr:last-child td { border-bottom: none; }
-        .roi-table tbody tr:hover { background-color: rgba(255,255,255,0.02); }
-        
-        .badge-estado { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
-        .b-funded { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
-        .b-breached { background: rgba(244,63,94,0.15); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
-        .b-challenge { background: rgba(41,98,255,0.15); color: #2962FF; border: 1px solid rgba(41,98,255,0.2); }
-        
-        .val-pos { color: #10B981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-        .val-neg { color: #F43F5E; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-        .val-neutral { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
-        .tl-text { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: var(--text-main); }
-        .acc-name { font-weight: 700; font-size: 14px; color: var(--text-main); }
-        .acc-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); background: var(--bg-main); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-light); margin-left: 8px; }
-        .num-cell { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-main); }
-        </style>
-        
-        <div class="roi-table-container">
-            <table class="roi-table">
-                <thead>
-                    <tr>
-                        <th>Firma / Fase</th>
-                        <th>Estado</th>
-                        <th>Línea de Tiempo</th>
-                        <th>Costo</th>
-                        <th>Retirado</th>
-                        <th>Flujo Neto</th>
-                        <th>ROI</th>
-                    </tr>
-                </thead>
-                <tbody>
-        """
-        
-        for c in cuentas_raw:
-            id_c = str(c["account_number"])
-            nombre = c.get("nombre_cuenta", "Desconocida")
-            estado = str(c.get("estado", "Desconocido")).lower()
-            costo = float(c.get("costo_inscripcion") or 0.0)
-            fc = c.get("fecha_compra")
-            obj = float(c.get("objetivo_profit", 0.0))
-            limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
-            
-            es_fondeada = "fondeada" in estado or "funded" in estado
-            es_breached_manual = "breached" in estado or "quemada" in estado or "eliminada" in estado
-            
-            retiros_brutos_cuenta = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()])
-            neto_cuenta = (retiros_brutos_cuenta * 0.80) - costo
-            
-            fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
-            fecha_breach_auto = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
-            
-            fecha_breach_final = fecha_breach_auto
-            
-            if es_breached_manual and not fecha_breach_auto:
-                ops_acc = [op for op in ops_raw if str(op.get("account_number")).strip() == id_c.strip()]
-                if ops_acc:
-                    ops_acc.sort(key=lambda x: str(x.get("fecha", "")), reverse=True)
-                    fecha_breach_final = str(ops_acc[0].get("fecha"))[:10]
-            
-            if fecha_breach_final or es_breached_manual:
-                fecha_mostrar = fecha_breach_final if fecha_breach_final else "Desconocida"
-                dias_str = f"<span class='tl-text' style='color:#F43F5E;'><i class='fa-solid fa-skull-crossbones'></i> Breached el {fecha_mostrar}</span>"
-                badge_cls = "b-breached"
-                estado_lbl = "Breached"
-                
-            elif es_fondeada:
-                dias_str = f"<span class='tl-text' style='color:#10B981;'><i class='fa-solid fa-star'></i> Cuenta Real Activa</span>"
-                badge_cls = "b-funded"
-                estado_lbl = "Funded"
-                
-            else:
-                badge_cls = "b-challenge"
-                estado_lbl = "Challenge"
-                
-                if fecha_meta:
-                    if fc:
+                if ("fondeada" in estado or "funded" in estado) and not fecha_breach:
+                    ops_retiros_acc = [op for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()]
+                    if ops_retiros_acc and ff:
+                        ops_retiros_acc.sort(key=lambda x: str(x.get("fecha", "")))
+                        primer_ret = str(ops_retiros_acc[0].get("fecha"))[:10]
                         try:
-                            d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                            dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta} <span style='color:var(--text-muted); font-size:11px;'>({d_p} d.)</span></span>"
-                        except:
-                            dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
-                    else:
-                        dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
-                else:
-                    dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-clock'></i> En progreso...</span>"
+                            dias_ret = (datetime.datetime.strptime(primer_ret, "%Y-%m-%d") - datetime.datetime.strptime(str(ff)[:10], "%Y-%m-%d")).days
+                            if dias_ret >= 0: tiempos_retiro.append(dias_ret)
+                        except: pass
+
+            t_med_fase = sum(tiempos_fases) / len(tiempos_fases) if tiempos_fases else 0
+            t_med_ret = sum(tiempos_retiro) / len(tiempos_retiro) if tiempos_retiro else 0
+            t_med_breach = sum(tiempos_breach) / len(tiempos_breach) if tiempos_breach else 0
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- CÁLCULO DE CONTADORES DE ESTADO (KPIs) ---
+            total_fase1 = len([c for c in cuentas_filtradas if "fase 1" in str(c.get("estado", "")).lower() or "phase 1" in str(c.get("estado", "")).lower()])
+            total_fase2 = len([c for c in cuentas_filtradas if "fase 2" in str(c.get("estado", "")).lower() or "phase 2" in str(c.get("estado", "")).lower()])
             
-            if neto_cuenta > 0:
-                flujo_str = f"<span class='val-pos'>+${neto_cuenta:,.2f}</span>"
-            elif neto_cuenta < 0:
-                flujo_str = f"<span class='val-neg'>-${abs(neto_cuenta):,.2f}</span>"
-            else:
-                flujo_str = f"<span class='val-neutral'>$0.00</span>"
+            total_aprobadas = 0
+            total_quemadas = 0
+            
+            for c in cuentas_filtradas:
+                id_c = str(c["account_number"])
+                limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
+                estado_txt = str(c.get("estado", "")).lower()
                 
-            if costo > 0:
-                roi_val = (neto_cuenta / costo) * 100
-                if roi_val > 0: roi_str = f"<span class='val-pos'>+{roi_val:,.2f}%</span>"
-                elif roi_val < 0: roi_str = f"<span class='val-neg'>{roi_val:,.2f}%</span>"
-                else: roi_str = "<span class='val-neutral'>0.00%</span>"
-            elif costo == 0 and neto_cuenta > 0:
-                roi_str = f"<span class='val-pos'>∞ <span style='font-size:10px; color:var(--text-muted); font-family:Inter;'>(Puro Beneficio)</span></span>"
-            else:
-                roi_str = "<span class='val-neutral'>-</span>"
+                f_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
                 
-            html_table += f"""
-                <tr>
-                    <td><span class='acc-name'>{nombre}</span><span class='acc-id'>#{id_c}</span></td>
-                    <td><span class='badge-estado {badge_cls}'>{estado_lbl}</span></td>
-                    <td>{dias_str}</td>
-                    <td class="num-cell">${costo:,.2f}</td>
-                    <td class="num-cell">${(retiros_brutos_cuenta * 0.80):,.2f}</td>
-                    <td>{flujo_str}</td>
-                    <td>{roi_str}</td>
-                </tr>
+                if "breached" in estado_txt or "quemada" in estado_txt or "eliminada" in estado_txt or f_breach:
+                    total_quemadas += 1
+                elif "fondeada" in estado_txt or "funded" in estado_txt:
+                    total_aprobadas += 1
+
+            # 3. RENDERIZADO DE TARJETAS KPI COMERCIALES
+            kpi_b1, kpi_b2, kpi_b3, kpi_b4 = st.columns(4)
+            
+            with kpi_b1:
+                st.markdown(f"""
+                <div class="kpi-card" style="border-left: 4px solid #F43F5E;">
+                    <div class="kpi-header"><span>Gasto Total</span><i class="fa-solid fa-credit-card"></i></div>
+                    <div class="kpi-value" style="color: #F43F5E;">${gasto_total:,.2f}</div>
+                    <div class="kpi-meta color-muted">Total de {total_evaluaciones} cuentas operadas</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with kpi_b2:
+                st.markdown(f"""
+                <div class="kpi-card" style="border-left: 4px solid #10B981;">
+                    <div class="kpi-header"><span>Retiros Netos (Pagados)</span><i class="fa-solid fa-money-bill-wave"></i></div>
+                    <div class="kpi-value" style="color: #10B981;">${retiros_netos_trader:,.2f}</div>
+                    <div class="kpi-meta color-muted">De ${retiros_brutos:,.0f} brutos generados</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with kpi_b3:
+                clase_color = "#10B981" if flujo_caja_neto >= 0 else "#F43F5E"
+                signo_flujo = "+" if flujo_caja_neto > 0 else ""
+                st.markdown(f"""
+                <div class="kpi-card" style="border-left: 4px solid {clase_color};">
+                    <div class="kpi-header"><span>Flujo Neto / ROI Real</span><i class="fa-solid fa-sack-dollar"></i></div>
+                    <div class="kpi-value" style="color: {clase_color};">{signo_flujo}${flujo_caja_neto:,.2f}</div>
+                    <div class="kpi-meta" style="color:{clase_color}; font-weight:700;">WR Fondeo: {win_rate_evaluaciones:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with kpi_b4:
+                st.markdown(f"""
+                <div class="kpi-card" style="border-left: 4px solid var(--blue-accent);">
+                    <div class="kpi-header"><span>Estado de Evaluaciones</span><i class="fa-solid fa-chart-pie"></i></div>
+                    <div class="kpi-value" style="color: white; font-size: 18px;">🔥 {total_quemadas} quemadas | ✅ {total_aprobadas} fondeadas</div>
+                    <div class="kpi-meta color-muted">
+                        Fase 1: <span style="color:white; font-weight:700;">{total_fase1}</span> | Fase 2: <span style="color:white; font-weight:700;">{total_fase2}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.divider()
+            st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
+            
+            # --- DISEÑO DE LA NUEVA TABLA HTML ---
+            html_table = """
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            
+            <style>
+            :root {
+                --primary-color: #2962FF; 
+                --bg-main: #0B0E14; 
+                --bg-sec: #111622;
+                --bg-card: #161D2E; 
+                --border-main: #1E293B; 
+                --border-light: #2D384D;
+                --text-main: #E2E8F0; 
+                --text-muted: #94A3B8; 
+                --win-color: #10B981;
+                --loss-color: #F43F5E; 
+            }
+            body { margin: 0; padding: 4px; background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }
+            .roi-table-container { background-color: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; overflow-x: auto; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+            .roi-table { width: 100%; border-collapse: collapse; text-align: left; }
+            .roi-table th { background-color: var(--bg-sec); color: var(--text-muted); padding: 14px 16px; font-size: 11px; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border-main); white-space: nowrap; }
+            .roi-table td { padding: 16px 16px; border-bottom: 1px solid var(--border-main); font-size: 13px; vertical-align: middle; white-space: nowrap; }
+            .roi-table tbody tr:last-child td { border-bottom: none; }
+            .roi-table tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+            
+            .badge-estado { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
+            .b-funded { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
+            .b-breached { background: rgba(244,63,94,0.15); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
+            .b-challenge { background: rgba(41,98,255,0.15); color: #2962FF; border: 1px solid rgba(41,98,255,0.2); }
+            
+            .val-pos { color: #10B981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+            .val-neg { color: #F43F5E; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+            .val-neutral { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+            .tl-text { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: var(--text-main); }
+            .acc-name { font-weight: 700; font-size: 14px; color: var(--text-main); }
+            .acc-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); background: var(--bg-main); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-light); margin-left: 8px; }
+            .num-cell { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-main); }
+            </style>
+            
+            <div class="roi-table-container">
+                <table class="roi-table">
+                    <thead>
+                        <tr>
+                            <th>Firma / Fase</th>
+                            <th>Estado</th>
+                            <th>Línea de Tiempo</th>
+                            <th>Costo</th>
+                            <th>Retirado</th>
+                            <th>Flujo Neto</th>
+                            <th>ROI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
             """
             
-        html_table += """
-                </tbody>
-            </table>
-        </div>
-        """
-        
-        st.components.v1.html(html_table, height=450, scrolling=True)
-        
+            for c in cuentas_filtradas:
+                id_c = str(c["account_number"])
+                nombre = c.get("nombre_cuenta", "Desconocida")
+                estado = str(c.get("estado", "Desconocido")).lower()
+                costo = float(c.get("costo_inscripcion") or 0.0)
+                fc = c.get("fecha_compra")
+                obj = float(c.get("objetivo_profit", 0.0))
+                limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
+                
+                es_fondeada = "fondeada" in estado or "funded" in estado
+                es_breached_manual = "breached" in estado or "quemada" in estado or "eliminada" in estado
+                
+                retiros_brutos_cuenta = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()])
+                neto_cuenta = (retiros_brutos_cuenta * 0.80) - costo
+                
+                fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
+                fecha_breach_auto = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+                
+                fecha_breach_final = fecha_breach_auto
+                
+                if es_breached_manual and not fecha_breach_auto:
+                    ops_acc = [op for op in ops_raw if str(op.get("account_number")).strip() == id_c.strip()]
+                    if ops_acc:
+                        ops_acc.sort(key=lambda x: str(x.get("fecha", "")), reverse=True)
+                        fecha_breach_final = str(ops_acc[0].get("fecha"))[:10]
+                
+                if fecha_breach_final or es_breached_manual:
+                    fecha_mostrar = fecha_breach_final if fecha_breach_final else "Desconocida"
+                    dias_str = f"<span class='tl-text' style='color:#F43F5E;'><i class='fa-solid fa-skull-crossbones'></i> Breached el {fecha_mostrar}</span>"
+                    badge_cls = "b-breached"
+                    estado_lbl = "Breached"
+                    
+                elif es_fondeada:
+                    dias_str = f"<span class='tl-text' style='color:#10B981;'><i class='fa-solid fa-star'></i> Cuenta Real Activa</span>"
+                    badge_cls = "b-funded"
+                    estado_lbl = "Funded"
+                    
+                else:
+                    badge_cls = "b-challenge"
+                    estado_lbl = "Challenge"
+                    
+                    if fecha_meta:
+                        if fc:
+                            try:
+                                d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                                dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta} <span style='color:var(--text-muted); font-size:11px;'>({d_p} d.)</span></span>"
+                            except:
+                                dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
+                        else:
+                            dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
+                    else:
+                        dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-clock'></i> En progreso...</span>"
+                
+                if neto_cuenta > 0:
+                    flujo_str = f"<span class='val-pos'>+${neto_cuenta:,.2f}</span>"
+                elif neto_cuenta < 0:
+                    flujo_str = f"<span class='val-neg'>-${abs(neto_cuenta):,.2f}</span>"
+                else:
+                    flujo_str = f"<span class='val-neutral'>$0.00</span>"
+                    
+                if costo > 0:
+                    roi_val = (neto_cuenta / costo) * 100
+                    if roi_val > 0: roi_str = f"<span class='val-pos'>+{roi_val:,.2f}%</span>"
+                    elif roi_val < 0: roi_str = f"<span class='val-neg'>{roi_val:,.2f}%</span>"
+                    else: roi_str = "<span class='val-neutral'>0.00%</span>"
+                elif costo == 0 and neto_cuenta > 0:
+                    roi_str = f"<span class='val-pos'>∞ <span style='font-size:10px; color:var(--text-muted); font-family:Inter;'>(Puro Beneficio)</span></span>"
+                else:
+                    roi_str = "<span class='val-neutral'>-</span>"
+                    
+                html_table += f"""
+                    <tr>
+                        <td><span class='acc-name'>{nombre}</span><span class='acc-id'>#{id_c}</span></td>
+                        <td><span class='badge-estado {badge_cls}'>{estado_lbl}</span></td>
+                        <td>{dias_str}</td>
+                        <td class="num-cell">${costo:,.2f}</td>
+                        <td class="num-cell">${(retiros_brutos_cuenta * 0.80):,.2f}</td>
+                        <td>{flujo_str}</td>
+                        <td>{roi_str}</td>
+                    </tr>
+                """
+                
+            html_table += """
+                    </tbody>
+                </table>
+            </div>
+            """
+            
+            st.components.v1.html(html_table, height=450, scrolling=True)
+            
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
