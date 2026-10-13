@@ -1874,7 +1874,7 @@ with tab_negocio:
                 "Retirado ($)": "${:,.2f}",
                 "Flujo Neto ($)": "${:,.2f}",
                 "ROI (%)": "{:+.2f}%"
-            }).applymap(lambda x: 'color: #10B981; font-weight:bold;' if x > 0 else ('color: #F43F5E;' if x < 0 else ''), subset=['Flujo Neto ($)', 'ROI (%)']),
+            }).map(lambda x: 'color: #10B981; font-weight:bold;' if x > 0 else ('color: #F43F5E;' if x < 0 else ''), subset=['Flujo Neto ($)', 'ROI (%)']),
             use_container_width=True,
             hide_index=True
         )
