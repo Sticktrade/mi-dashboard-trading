@@ -497,6 +497,100 @@ def modal_gestionar_estados(cuentas_raw_list):
                     st.error(f"Error al actualizar la base de datos: {e}")
         else:
             st.info("No realizaste ningún cambio.")
+# =============================================================================
+# FUNCIONES DE NEGOCIO Y AUTODETECCIÓN
+# =============================================================================
+def obtener_fecha_meta_alcanzada(id_cuenta, objetivo):
+    if objetivo <= 0: return None
+    ops = [op for op in ops_raw if str(op.get("account_number")).strip() == str(id_cuenta).strip() and str(op.get("tipo", "")).upper() != "WITHDRAWAL"]
+    if not ops: return None
+    
+    ops.sort(key=lambda x: str(x.get("fecha", "")))
+    cum_pnl = 0.0
+    for op in ops:
+        cum_pnl += float(op.get("resultado", 0.0))
+        if cum_pnl >= objetivo:
+            return str(op.get("fecha", ""))[:10]
+    return None
+
+def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
+    if limite_perdida <= 0: return None
+    ops = [op for op in ops_raw if str(op.get("account_number")).strip() == str(id_cuenta).strip() and str(op.get("tipo", "")).upper() != "WITHDRAWAL"]
+    if not ops: return None
+    
+    ops.sort(key=lambda x: str(x.get("fecha", "")))
+    cum_pnl = 0.0
+    for op in ops:
+        cum_pnl += float(op.get("resultado", 0.0))
+        if cum_pnl <= -abs(limite_perdida):
+            return str(op.get("fecha", ""))[:10]
+    return None
+
+@st.dialog("📝 Editar Datos Comerciales", width="large")
+def modal_editar_datos_negocio(cuentas_raw_list):
+    st.markdown("Modifica los costos y fechas haciendo clic directamente en las celdas (como en Excel). El sistema usará esto junto con tus trades para detectar tu rentabilidad real.")
+    
+    datos_edicion = []
+    for c in cuentas_raw_list:
+        fc = c.get("fecha_compra")
+        f2 = c.get("fecha_fase2")
+        ff = c.get("fecha_fondeo")
+        
+        try: fc_date = datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d").date() if fc else None
+        except: fc_date = None
+        
+        try: f2_date = datetime.datetime.strptime(str(f2)[:10], "%Y-%m-%d").date() if f2 else None
+        except: f2_date = None
+        
+        try: ff_date = datetime.datetime.strptime(str(ff)[:10], "%Y-%m-%d").date() if ff else None
+        except: ff_date = None
+
+        datos_edicion.append({
+            "account_number": str(c["account_number"]),
+            "nombre_cuenta": c.get("nombre_cuenta", "Cuenta"),
+            "costo_inscripcion": float(c.get("costo_inscripcion") or 0.0),
+            "fecha_compra": fc_date,
+            "fecha_fase2": f2_date,
+            "fecha_fondeo": ff_date
+        })
+        
+    df_edit = pd.DataFrame(datos_edicion)
+    
+    edited_df = st.data_editor(
+        df_edit,
+        column_config={
+            "account_number": st.column_config.TextColumn("ID", disabled=True),
+            "nombre_cuenta": st.column_config.TextColumn("Firma", disabled=True),
+            "costo_inscripcion": st.column_config.NumberColumn("Costo ($)", min_value=0.0, format="$%.2f", step=1.0),
+            "fecha_compra": st.column_config.DateColumn("Compra"),
+            "fecha_fase2": st.column_config.DateColumn("Pase a F2"),
+            "fecha_fondeo": st.column_config.DateColumn("Fondeo"),
+        },
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed"
+    )
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if st.button("💾 Guardar Cambios en Supabase", use_container_width=True):
+        with st.spinner("Guardando información comercial..."):
+            try:
+                for index, row in edited_df.iterrows():
+                    acc_id = row["account_number"]
+                    update_data = {"costo_inscripcion": float(row["costo_inscripcion"])}
+                    
+                    update_data["fecha_compra"] = row["fecha_compra"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_compra"]) else None
+                    update_data["fecha_fase2"] = row["fecha_fase2"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_fase2"]) else None
+                    update_data["fecha_fondeo"] = row["fecha_fondeo"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_fondeo"]) else None
+                        
+                    supabase.table("cuentas").update(update_data).eq("account_number", acc_id).execute()
+                    
+                st.success("¡Datos comerciales guardados correctamente!")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
 # -----------------------------------------------------------------------------
 # 3. BARRA LATERAL / ORGANIZACIÓN DE CUENTAS
 # -----------------------------------------------------------------------------
@@ -781,9 +875,10 @@ st.markdown("<br>", unsafe_allow_html=True)
 # -----------------------------------------------------------------------------
 # 5. PESTAÑAS PRINCIPALES DEL DASHBOARD
 # -----------------------------------------------------------------------------
-tab_calendar, tab_estado_analytics, tab_trades = st.tabs([
+tab_calendar, tab_estado_analytics, tab_negocio, tab_trades = st.tabs([
     "📅 Calendario de Resultados",
     "🛡️ Estado & Analytics",
+    "💼 Negocio Prop Firm",
     "📖 Historial de Operaciones"
 ])
 
@@ -1621,6 +1716,185 @@ with tab_estado_analytics:
                                     use_container_width=True,
                                     hide_index=True
                                 )
+# =============================================================================
+# TAB 3: NEGOCIO PROP FIRM & FLUJO DE CAJA (ROI)
+# =============================================================================
+with tab_negocio:
+    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-briefcase' style='color:var(--blue-accent); margin-right:6px;'></i> Flujo de Caja y Rentabilidad Real (ROI)</h3>", unsafe_allow_html=True)
+    st.caption("Esta sección mide tu trading como un negocio: Costos de evaluación vs. Retiros netos reales en tu bolsillo.")
+    
+    col_btn1, col_btn2 = st.columns([1, 3])
+    with col_btn1:
+        if st.button("✏️ Ingresar Costos y Fechas", use_container_width=True):
+            if cuentas_raw:
+                modal_editar_datos_negocio(cuentas_raw)
+            else:
+                st.warning("No hay cuentas cargadas.")
+                
+    if not cuentas_raw:
+        st.info("No hay cuentas en la base de datos para calcular las métricas comerciales.")
+    else:
+        # --- CÁLCULO DE MÉTRICAS COMERCIALES GLOBALES ---
+        gasto_total = sum([float(c.get("costo_inscripcion") or 0.0) for c in cuentas_raw])
+        
+        ops_retiros = [op for op in ops_raw if "WITHDRAWAL" in str(op.get("tipo", "")).upper()]
+        retiros_brutos = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros])
+        retiros_netos_trader = retiros_brutos * 0.80 
+        
+        flujo_caja_neto = retiros_netos_trader - gasto_total
+        roi_real = (flujo_caja_neto / gasto_total * 100) if gasto_total > 0 else 0
+        
+        total_evaluaciones = len(cuentas_raw)
+        cuentas_fondeadas_historicas = [c for c in cuentas_raw if "fondeada" in str(c.get("estado", "")).lower() or "funded" in str(c.get("estado", "")).lower()]
+        win_rate_evaluaciones = (len(cuentas_fondeadas_historicas) / total_evaluaciones * 100) if total_evaluaciones > 0 else 0
+        
+        # --- CÁLCULO DINÁMICO DE TIEMPOS Y AUTODETECCIÓN ---
+        tiempos_fases = []
+        tiempos_retiro = []
+        tiempos_breach = []
+        
+        for c in cuentas_raw:
+            id_c = str(c["account_number"])
+            obj = float(c.get("objetivo_profit", 0.0))
+            limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0) 
+            fc = c.get("fecha_compra")
+            ff = c.get("fecha_fondeo")
+            estado = str(c.get("estado", "")).lower()
+            
+            # Autodetecciones
+            fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
+            fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+            
+            # 1. ¿Cuánto tardaste en perderla?
+            if fecha_breach and fc:
+                try:
+                    dias_breach = (datetime.datetime.strptime(fecha_breach, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                    if dias_breach >= 0: tiempos_breach.append(dias_breach)
+                except: pass
+
+            # 2. ¿Cuánto tardaste en pasar la fase? (solo si no se quemó)
+            elif fecha_meta and fc and not fecha_breach:
+                try:
+                    dias_fase = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                    if dias_fase >= 0: tiempos_fases.append(dias_fase)
+                except: pass
+
+            # 3. ¿Cuánto tardaste en el primer retiro?
+            if ("fondeada" in estado or "funded" in estado) and not fecha_breach:
+                ops_retiros_acc = [op for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()]
+                if ops_retiros_acc and ff:
+                    ops_retiros_acc.sort(key=lambda x: str(x.get("fecha", "")))
+                    primer_ret = str(ops_retiros_acc[0].get("fecha"))[:10]
+                    try:
+                        dias_ret = (datetime.datetime.strptime(primer_ret, "%Y-%m-%d") - datetime.datetime.strptime(str(ff)[:10], "%Y-%m-%d")).days
+                        if dias_ret >= 0: tiempos_retiro.append(dias_ret)
+                    except: pass
+
+        t_med_fase = sum(tiempos_fases) / len(tiempos_fases) if tiempos_fases else 0
+        t_med_ret = sum(tiempos_retiro) / len(tiempos_retiro) if tiempos_retiro else 0
+        t_med_breach = sum(tiempos_breach) / len(tiempos_breach) if tiempos_breach else 0
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        kpi_b1, kpi_b2, kpi_b3, kpi_b4 = st.columns(4)
+        
+        with kpi_b1:
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid #F43F5E;">
+                <div class="kpi-header"><span>Gasto Total</span><i class="fa-solid fa-credit-card"></i></div>
+                <div class="kpi-value" style="color: #F43F5E;">${gasto_total:,.2f}</div>
+                <div class="kpi-meta color-muted">Total de {total_evaluaciones} cuentas operadas</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with kpi_b2:
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid #10B981;">
+                <div class="kpi-header"><span>Retiros Netos</span><i class="fa-solid fa-money-bill-wave"></i></div>
+                <div class="kpi-value" style="color: #10B981;">${retiros_netos_trader:,.2f}</div>
+                <div class="kpi-meta color-muted">De ${retiros_brutos:,.0f} brutos generados</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with kpi_b3:
+            clase_color = "#10B981" if flujo_caja_neto >= 0 else "#F43F5E"
+            signo_flujo = "+" if flujo_caja_neto > 0 else ""
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid {clase_color};">
+                <div class="kpi-header"><span>Flujo Neto / ROI Real</span><i class="fa-solid fa-sack-dollar"></i></div>
+                <div class="kpi-value" style="color: {clase_color};">{signo_flujo}${flujo_caja_neto:,.2f}</div>
+                <div class="kpi-meta" style="color:{clase_color}; font-weight:700;">WR Fondeo: {win_rate_evaluaciones:.1f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with kpi_b4:
+            st.markdown(f"""
+            <div class="kpi-card" style="border-left: 4px solid var(--blue-accent);">
+                <div class="kpi-header"><span>Métricas de Tiempos</span><i class="fa-solid fa-stopwatch"></i></div>
+                <div class="kpi-value" style="color: white; font-size: 20px;">Pase: {t_med_fase:.0f} d. | Quema: {t_med_breach:.0f} d.</div>
+                <div class="kpi-meta color-muted">Tiempo medio a Payout: <span style="font-weight:700; color:white;">{t_med_ret:.0f} días</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Cuenta")
+        
+        datos_tabla_negocio = []
+        for c in cuentas_raw:
+            id_c = str(c["account_number"])
+            nombre = c.get("nombre_cuenta", "Desconocida")
+            estado = c.get("estado", "Desconocido")
+            costo = float(c.get("costo_inscripcion") or 0.0)
+            fc = c.get("fecha_compra")
+            obj = float(c.get("objetivo_profit", 0.0))
+            limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
+            
+            retiros_brutos_cuenta = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()])
+            neto_cuenta = (retiros_brutos_cuenta * 0.80) - costo
+            roi_cuenta = (neto_cuenta / costo * 100) if costo > 0 else 0
+            
+            fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
+            fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
+            
+            dias_str = "-"
+            estado_display = estado.capitalize()
+            
+            if fecha_breach:
+                estado_display = "Breached (Auto)"
+                if fc:
+                    try: 
+                        d_b = (datetime.datetime.strptime(fecha_breach, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                        if d_b >= 0: dias_str = f"Perdida en {d_b} d."
+                    except: pass
+            elif fecha_meta:
+                if fc:
+                    try: 
+                        d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                        if d_p >= 0: dias_str = f"Aprobada en {d_p} d."
+                    except: pass
+            
+            datos_tabla_negocio.append({
+                "Firma / ID": f"{nombre} (#{id_c})",
+                "Estado": estado_display,
+                "Línea de Tiempo": dias_str,
+                "Costo ($)": costo,
+                "Retirado ($)": retiros_brutos_cuenta * 0.80,
+                "Flujo Neto ($)": neto_cuenta,
+                "ROI (%)": roi_cuenta
+            })
+            
+        df_negocio = pd.DataFrame(datos_tabla_negocio)
+        st.dataframe(
+            df_negocio.style.format({
+                "Costo ($)": "${:,.2f}",
+                "Retirado ($)": "${:,.2f}",
+                "Flujo Neto ($)": "${:,.2f}",
+                "ROI (%)": "{:+.2f}%"
+            }).applymap(lambda x: 'color: #10B981; font-weight:bold;' if x > 0 else ('color: #F43F5E;' if x < 0 else ''), subset=['Flujo Neto ($)', 'ROI (%)']),
+            use_container_width=True,
+            hide_index=True
+        )
+        
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
 # =============================================================================
