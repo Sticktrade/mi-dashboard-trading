@@ -1487,8 +1487,8 @@ with tab_estado_analytics:
     if df_ops_trading.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        # 1. RENDIMIENTO GLOBAL (Oculto por defecto en un toggle)
-        if st.toggle("🌍 Mostrar Rendimiento Consolidado Global (Todas las Cuentas)", key="tgl_global_analytics"):
+        # 1. RENDIMIENTO GLOBAL (ACTIVADO POR DEFECTO CON value=True)
+        if st.toggle("🌍 Mostrar Rendimiento Consolidado Global (Todas las Cuentas)", value=True, key="tgl_global_analytics"):
             filtro_periodo_global = st.radio(
                 "📅 Rango Temporal Global:",
                 options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
@@ -1599,7 +1599,6 @@ with tab_estado_analytics:
             else:
                 grupo = 4
                 
-            # Retornamos el grupo, y el negativo de la ganancia para ordenar de mayor a menor profit dentro del grupo
             return (grupo, -ganancia)
 
         cuentas_ordenadas = sorted(cuentas, key=obtener_llave_orden) if cuentas else []
@@ -1698,11 +1697,11 @@ with tab_estado_analytics:
                     """, unsafe_allow_html=True)
 
                     # ---------------------------------------------------------
-                    # SECCIÓN COLAPSABLE: GRÁFICOS Y ANALYTICS
+                    # SECCIÓN COLAPSABLE: GRÁFICOS Y ANALYTICS (ACTIVADO POR DEFECTO CON value=True)
                     # ---------------------------------------------------------
                     st.markdown("<hr style='border-color: var(--border-light); margin: 8px 0;'>", unsafe_allow_html=True)
                     
-                    if st.toggle(f"📊 Ver Gráficos y Analytics", key=f"tgl_charts_{acc_num_str}"):
+                    if st.toggle(f"📊 Ver Gráficos y Analytics", value=True, key=f"tgl_charts_{acc_num_str}"):
                         acc_period_filter = st.radio(
                             f"📅 Rango Temporal:",
                             options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
@@ -1795,13 +1794,11 @@ with tab_estado_analytics:
                                 st.plotly_chart(fig_acc_donut, use_container_width=True)
 
                     # ---------------------------------------------------------
-                    # SECCIÓN COLAPSABLE: RETIROS (Solo para Fondeadas)
+                    # SECCIÓN COLAPSABLE: RETIROS (ACTIVADO POR DEFECTO CON value=True)
                     # ---------------------------------------------------------
                     if es_fondeada:
-                        # Usamos checkbox que está 100% adaptado a nuestro CSS
-                        if st.checkbox("💸 Ver Historial de Retiros & Profit Split (80%)", key=f"chk_ret_{acc_num_str}"):
+                        if st.checkbox("💸 Ver Historial de Retiros & Profit Split (80%)", value=True, key=f"chk_ret_{acc_num_str}"):
                             
-                            # Búsqueda más flexible (.strip() y 'in') para evitar errores por espacios en la DB
                             ops_acc = [
                                 op for op in ops_raw 
                                 if str(op.get("account_number")).strip() == acc_num_str.strip() 
@@ -1824,7 +1821,6 @@ with tab_estado_analytics:
                                 df_ret = pd.DataFrame(ops_acc)
                                 df_ret["bruto"] = df_ret["resultado"].apply(lambda x: abs(float(x)))
                                 df_ret["neto_80"] = df_ret["bruto"] * 0.80
-                                # Convertimos a string por seguridad antes de cortar la fecha
                                 df_ret["fecha_clean"] = df_ret["fecha"].astype(str).str.slice(0, 10) 
                                 
                                 df_ret_show = df_ret[["fecha_clean", "bruto", "neto_80", "comentario"]].rename(columns={
