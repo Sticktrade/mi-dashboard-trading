@@ -329,7 +329,7 @@ def process_raw_operations(ops_list):
 # FUNCIONES DE LIMPIEZA Y PREPARACIÓN DE DATOS
 # =============================================================================
 def corregir_comisiones_indices(operaciones_raw):
-    # Lista expansiva con las variaciones de nombres de índices en diferentes brokers
+    # Lista expansiva con las variaciones de nombres de índices
     indices_keywords = [
         "US100", "NAS100", "NDX", "USTEC", "NASDAQ", 
         "US30", "WS30", "DJI", "DOW",                 
@@ -341,19 +341,29 @@ def corregir_comisiones_indices(operaciones_raw):
     ]
     
     for op in operaciones_raw:
-        simbolo = str(op.get("simbolo", "")).upper()
+        # Busca la columna del símbolo en español o en inglés
+        simbolo = str(op.get("simbolo") or op.get("symbol") or "").upper()
         es_indice = any(keyword in simbolo for keyword in indices_keywords)
         
         if es_indice:
-            comision = float(op.get("comision") or 0.0)
+            # Busca la columna de comisión en español o en inglés
+            comision = float(op.get("comision") or op.get("commission") or 0.0)
+            
             if comision != 0.0:
-                resultado_actual = float(op.get("resultado") or 0.0)
-                # Al restar la comisión (que suele venir en negativo), se suma de vuelta al resultado
-                op["resultado"] = resultado_actual - comision
-                op["comision"] = 0.0
+                # Busca el resultado en español o en inglés
+                resultado_actual = float(op.get("resultado") or op.get("profit") or 0.0)
+                
+                # Al restar la comisión (que suele venir en negativo, ej: -4.00), matemáticamente se suma al neto
+                nuevo_resultado = resultado_actual - comision
+                
+                # Forzamos la actualización en cualquier variante de nombre que tenga tu base de datos
+                if "resultado" in op: op["resultado"] = nuevo_resultado
+                if "profit" in op: op["profit"] = nuevo_resultado
+                
+                if "comision" in op: op["comision"] = 0.0
+                if "commission" in op: op["commission"] = 0.0
                 
     return operaciones_raw
-
 
 @st.cache_data(ttl=300)
 def cargar_datos():
