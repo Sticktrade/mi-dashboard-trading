@@ -939,11 +939,12 @@ with tab_calendar:
         st.session_state.cal_ano = now.year
 
     # FLECHAS Y SELECTORES DE MES INTEGRADOS
-    c_arr_izq, c_m, c_y, c_arr_der = st.columns([1, 4, 3, 1])
+    c_arr_izq, c_m, c_arr_der, c_espacio, c_y = st.columns([0.5, 3, 0.5, 0.5, 3])
     
     with c_arr_izq:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("⬅️", use_container_width=True, help="Mes anterior"):
+        # Espacio para alinear el botón con el input (debajo del label)
+        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
+        if st.button("❮", use_container_width=True, help="Mes anterior"):
             if st.session_state.cal_mes == 1:
                 st.session_state.cal_mes = 12
                 st.session_state.cal_ano -= 1
@@ -957,20 +958,20 @@ with tab_calendar:
             st.session_state.cal_mes = mes_sel
             st.rerun()
             
-    with c_y:
-        ano_sel = st.number_input("Año Mensual:", min_value=2024, max_value=2030, value=st.session_state.cal_ano, key="selector_ano")
-        if ano_sel != st.session_state.cal_ano:
-            st.session_state.cal_ano = ano_sel
-            st.rerun()
-            
     with c_arr_der:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("➡️", use_container_width=True, help="Mes siguiente"):
+        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
+        if st.button("❯", use_container_width=True, help="Mes siguiente"):
             if st.session_state.cal_mes == 12:
                 st.session_state.cal_mes = 1
                 st.session_state.cal_ano += 1
             else:
                 st.session_state.cal_mes += 1
+            st.rerun()
+            
+    with c_y:
+        ano_sel = st.number_input("Año:", min_value=2024, max_value=2030, value=st.session_state.cal_ano, key="selector_ano")
+        if ano_sel != st.session_state.cal_ano:
+            st.session_state.cal_ano = ano_sel
             st.rerun()
         
     daily_stats = {}
