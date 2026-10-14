@@ -350,11 +350,16 @@ def cargar_datos():
             
         inicio += paso
         
+    # ... (final del bucle while True de cargar_datos)
+        
     if todas_las_operaciones:
+        # 1. Procesamos los datos crudos
         todas_las_operaciones = process_raw_operations(todas_las_operaciones)
+        # 2. Inyectamos la limpieza de comisiones de índices
+        todas_las_operaciones = corregir_comisiones_indices(todas_las_operaciones)
         
     return res_cuentas.data, todas_las_operaciones
-
+    
 cuentas_raw, ops_raw = cargar_datos()
 
 def parse_capturas(capturas_data):
