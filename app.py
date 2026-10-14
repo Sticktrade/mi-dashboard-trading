@@ -251,7 +251,6 @@ def obtener_tarifa_por_lote(nombre_cuenta):
         return 4.0
     return 4.0
 
-@st.cache_data
 def process_raw_operations(ops_list):
     if not ops_list:
         return []
@@ -325,6 +324,7 @@ def process_raw_operations(ops_list):
         
     return processed_ops
 
+
 # =============================================================================
 # FUNCIONES DE LIMPIEZA Y PREPARACIÓN DE DATOS
 # =============================================================================
@@ -341,29 +341,29 @@ def corregir_comisiones_indices(operaciones_raw):
     ]
     
     for op in operaciones_raw:
-        # Busca la columna del símbolo en español o en inglés
-        simbolo = str(op.get("simbolo") or op.get("symbol") or "").upper()
+        # Aquí 'simbolo' ya fue estandarizado por process_raw_operations
+        simbolo = str(op.get("simbolo", "")).upper()
         es_indice = any(keyword in simbolo for keyword in indices_keywords)
         
         if es_indice:
-            # Busca la columna de comisión en español o en inglés
-            comision = float(op.get("comision") or op.get("commission") or 0.0)
+            # En process_raw_operations, la comisión se guarda en 'comision_calc' en valor absoluto
+            comision_cobrada = float(op.get("comision_calc", 0.0))
             
-            if comision != 0.0:
-                # Busca el resultado en español o en inglés
-                resultado_actual = float(op.get("resultado") or op.get("profit") or 0.0)
+            if comision_cobrada > 0.0:
+                # El 'resultado' actual ya tiene la comisión descontada (raw_profit - comision_calc)
+                # Así que simplemente le sumamos la comisión de vuelta al 'resultado'
+                resultado_actual = float(op.get("resultado", 0.0))
+                op["resultado"] = resultado_actual + comision_cobrada
                 
-                # Al restar la comisión (que suele venir en negativo, ej: -4.00), matemáticamente se suma al neto
-                nuevo_resultado = resultado_actual - comision
+                # Dejamos la comisión oficial en cero
+                op["comision_calc"] = 0.0
                 
-                # Forzamos la actualización en cualquier variante de nombre que tenga tu base de datos
-                if "resultado" in op: op["resultado"] = nuevo_resultado
-                if "profit" in op: op["profit"] = nuevo_resultado
-                
-                if "comision" in op: op["comision"] = 0.0
-                if "commission" in op: op["commission"] = 0.0
+                # Por limpieza extra, si quedaron las llaves raw, las borramos también
+                for k in ["comision", "commission", "commissions"]:
+                    if k in op: op[k] = 0.0
                 
     return operaciones_raw
+
 
 @st.cache_data(ttl=300)
 def cargar_datos():
@@ -391,9 +391,9 @@ def cargar_datos():
         inicio += paso
         
     if todas_las_operaciones:
-        # 1. Procesamos los datos crudos (Asegúrate de que process_raw_operations esté definida más arriba)
+        # 1. Procesamos los datos crudos (crea comision_calc y limpia los diccionarios)
         todas_las_operaciones = process_raw_operations(todas_las_operaciones)
-        # 2. Inyectamos la limpieza de comisiones de índices ANTES de enviar los datos al dashboard
+        # 2. Inyectamos la limpieza de comisiones de índices identificando a los que no aplican
         todas_las_operaciones = corregir_comisiones_indices(todas_las_operaciones)
         
     return res_cuentas.data, todas_las_operaciones
@@ -475,6 +475,7 @@ def mostrar_modal_zoom(cap):
             st.markdown(f"**Notas técnicas:** {nota_txt}")
         else:
             st.caption("Sin notas técnicas registradas.")
+
 @st.dialog("⚙️ Gestionar Estado de Cuentas", width="large")
 def modal_gestionar_estados(cuentas_raw_list):
     st.markdown("Si la automatización falló, puedes forzar el cambio de estado de tus cuentas manualmente aquí. **Esto actualizará tu base de datos en Supabase.**")
@@ -541,6 +542,7 @@ def modal_gestionar_estados(cuentas_raw_list):
                     st.error(f"Error al actualizar la base de datos: {e}")
         else:
             st.info("No realizaste ningún cambio.")
+
 # =============================================================================
 # FUNCIONES DE NEGOCIO Y AUTODETECCIÓN
 # =============================================================================
@@ -569,33 +571,6 @@ def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
         if cum_pnl <= -abs(limite_perdida):
             return str(op.get("fecha", ""))[:10]
     return None
-    
-def corregir_comisiones_indices(operaciones_raw):
-    # Lista expansiva con las variaciones de nombres de índices en diferentes brokers
-    indices_keywords = [
-        "US100", "NAS100", "NDX", "USTEC", "NASDAQ", # Nasdaq
-        "US30", "WS30", "DJI", "DOW",                 # Dow Jones
-        "US500", "SP500", "SPX",                      # S&P 500
-        "GER40", "DAX", "GER30", "DE40",              # DAX Alemán
-        "UK100", "FTSE",                              # FTSE UK
-        "JP225", "NIKKEI",                            # Nikkei
-        "FRA40", "EUSTX50", "AUS200"                  # Otros
-    ]
-    
-    for op in operaciones_raw:
-        simbolo = str(op.get("simbolo", "")).upper()
-        es_indice = any(keyword in simbolo for keyword in indices_keywords)
-        
-        if es_indice:
-            comision = float(op.get("comision") or 0.0)
-            if comision != 0.0:
-                resultado_actual = float(op.get("resultado") or 0.0)
-                # Al restar la comisión (que suele venir en negativo, ej: -4.00), 
-                # matemáticamente se suma de vuelta al resultado bruto (+4.00)
-                op["resultado"] = resultado_actual - comision
-                op["comision"] = 0.0
-                
-    return operaciones_raw
 
 @st.dialog("📝 Editar Datos Comerciales", width="large")
 def modal_editar_datos_negocio(cuentas_raw_list):
@@ -675,7 +650,6 @@ if st.sidebar.button("🔄 Actualizar Datos", use_container_width=True):
 
 st.sidebar.markdown("### <i class='fa-solid fa-sliders' style='color:#2962FF; margin-right:4px;'></i> Selección de Cuentas", unsafe_allow_html=True)
 
-# ---> NUEVO BOTÓN PARA ABRIR EL MODAL <---
 if st.sidebar.button("⚙️ Gestionar Estados", use_container_width=True):
     if cuentas_raw:
         modal_gestionar_estados(cuentas_raw)
@@ -956,14 +930,48 @@ with tab_calendar:
         mostrar_simbolos_cal = st.toggle("👁️ Desglose por símbolo", value=True, key="toggle_simbolos_cal")
     
     now = datetime.datetime.now()
-    c_m, c_y = st.columns([1, 1])
-    
     MESES_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
+    # Inicialización de estado para el calendario si no existe
+    if "cal_mes" not in st.session_state:
+        st.session_state.cal_mes = now.month
+    if "cal_ano" not in st.session_state:
+        st.session_state.cal_ano = now.year
+
+    # FLECHAS Y SELECTORES DE MES INTEGRADOS
+    c_arr_izq, c_m, c_y, c_arr_der = st.columns([1, 4, 3, 1])
+    
+    with c_arr_izq:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("⬅️", use_container_width=True, help="Mes anterior"):
+            if st.session_state.cal_mes == 1:
+                st.session_state.cal_mes = 12
+                st.session_state.cal_ano -= 1
+            else:
+                st.session_state.cal_mes -= 1
+            st.rerun()
+            
     with c_m:
-        mes_sel = st.selectbox("Mes:", range(1, 13), index=now.month - 1, format_func=lambda x: MESES_ES[x-1])
+        mes_sel = st.selectbox("Mes:", range(1, 13), index=st.session_state.cal_mes - 1, format_func=lambda x: MESES_ES[x-1], key="selector_mes")
+        if mes_sel != st.session_state.cal_mes:
+            st.session_state.cal_mes = mes_sel
+            st.rerun()
+            
     with c_y:
-        ano_sel = st.number_input("Año Mensual:", min_value=2024, max_value=2030, value=now.year, key="ano_mensual_sel")
+        ano_sel = st.number_input("Año Mensual:", min_value=2024, max_value=2030, value=st.session_state.cal_ano, key="selector_ano")
+        if ano_sel != st.session_state.cal_ano:
+            st.session_state.cal_ano = ano_sel
+            st.rerun()
+            
+    with c_arr_der:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("➡️", use_container_width=True, help="Mes siguiente"):
+            if st.session_state.cal_mes == 12:
+                st.session_state.cal_mes = 1
+                st.session_state.cal_ano += 1
+            else:
+                st.session_state.cal_mes += 1
+            st.rerun()
         
     daily_stats = {}
     if not df_ops_trading.empty:
@@ -2271,7 +2279,7 @@ with tab_trades:
                         raw_prof = sum([float(op.get("raw_profit", 0)) for op in matching_ops])
                         
                         if tot_comm > 0 or tot_swap != 0:
-                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** | Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
+                            st.info(f"💵 **Desglose de la Sesión:** Bruto: **${raw_prof:,.2f}** | Comisiones: **-${tot_comm:,.2f}** \vert{} Swap: **${tot_swap:,.2f}** ➔ **Neto: ${res_num:,.2f}**")
                         else:
                             st.info("ℹ️ Registro de sesión sin comisiones aplicadas.")
                             
