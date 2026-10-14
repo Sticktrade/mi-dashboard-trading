@@ -325,6 +325,36 @@ def process_raw_operations(ops_list):
         
     return processed_ops
 
+# =============================================================================
+# FUNCIONES DE LIMPIEZA Y PREPARACIÓN DE DATOS
+# =============================================================================
+def corregir_comisiones_indices(operaciones_raw):
+    # Lista expansiva con las variaciones de nombres de índices en diferentes brokers
+    indices_keywords = [
+        "US100", "NAS100", "NDX", "USTEC", "NASDAQ", 
+        "US30", "WS30", "DJI", "DOW",                 
+        "US500", "SP500", "SPX",                      
+        "GER40", "DAX", "GER30", "DE40",              
+        "UK100", "FTSE",                              
+        "JP225", "NIKKEI",                            
+        "FRA40", "EUSTX50", "AUS200"                  
+    ]
+    
+    for op in operaciones_raw:
+        simbolo = str(op.get("simbolo", "")).upper()
+        es_indice = any(keyword in simbolo for keyword in indices_keywords)
+        
+        if es_indice:
+            comision = float(op.get("comision") or 0.0)
+            if comision != 0.0:
+                resultado_actual = float(op.get("resultado") or 0.0)
+                # Al restar la comisión (que suele venir en negativo), se suma de vuelta al resultado
+                op["resultado"] = resultado_actual - comision
+                op["comision"] = 0.0
+                
+    return operaciones_raw
+
+
 @st.cache_data(ttl=300)
 def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
@@ -350,16 +380,15 @@ def cargar_datos():
             
         inicio += paso
         
-    # ... (final del bucle while True de cargar_datos)
-        
     if todas_las_operaciones:
-        # 1. Procesamos los datos crudos
+        # 1. Procesamos los datos crudos (Asegúrate de que process_raw_operations esté definida más arriba)
         todas_las_operaciones = process_raw_operations(todas_las_operaciones)
-        # 2. Inyectamos la limpieza de comisiones de índices
+        # 2. Inyectamos la limpieza de comisiones de índices ANTES de enviar los datos al dashboard
         todas_las_operaciones = corregir_comisiones_indices(todas_las_operaciones)
         
     return res_cuentas.data, todas_las_operaciones
-    
+
+# Ejecutamos la carga de datos
 cuentas_raw, ops_raw = cargar_datos()
 
 def parse_capturas(capturas_data):
