@@ -964,30 +964,33 @@ with tab_calendar:
     def sync_selector_ano():
         st.session_state.cal_ano = st.session_state.selector_ano
 
-    # Sincronización inicial de llaves en session_state
     if "selector_mes" not in st.session_state:
         st.session_state.selector_mes = st.session_state.cal_mes
     if "selector_ano" not in st.session_state:
         st.session_state.selector_ano = st.session_state.cal_ano
 
-    # Estilos CSS específicos para convertir los botones de flecha en iconos limpios
+    # Estilos CSS de alta prioridad para quitar bordes/fondos y alinear verticalmente
     st.markdown("""
     <style>
-        div[data-testid="stColumn"] div.stButton > button[key^="btn_nav_"] {
+        div[data-testid="stHorizontalBlock"] > div:nth-child(1) button,
+        div[data-testid="stHorizontalBlock"] > div:nth-child(3) button {
             background-color: transparent !important;
+            background: transparent !important;
             border: none !important;
             box-shadow: none !important;
             color: var(--text-muted) !important;
-            font-size: 18px !important;
+            font-size: 22px !important;
+            font-weight: bold !important;
             padding: 0 !important;
-            margin-top: 28px !important;
-            height: 40px !important;
+            margin-top: 22px !important;
+            height: 42px !important;
             width: 100% !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }
-        div[data-testid="stColumn"] div.stButton > button[key^="btn_nav_"]:hover {
+        div[data-testid="stHorizontalBlock"] > div:nth-child(1) button:hover,
+        div[data-testid="stHorizontalBlock"] > div:nth-child(3) button:hover {
             color: var(--primary-color) !important;
             background-color: transparent !important;
             border: none !important;
@@ -995,7 +998,7 @@ with tab_calendar:
     </style>
     """, unsafe_allow_html=True)
 
-    # DISPOSICIÓN COMPACTA: FLECHA IZQ - MES - FLECHA DER - ESPACIO - AÑO
+    # DISPOSICIÓN COMPACTA
     c_arr_izq, c_m, c_arr_der, _, c_y = st.columns([0.25, 2.5, 0.25, 0.5, 2.5])
     
     with c_arr_izq:
@@ -1022,7 +1025,6 @@ with tab_calendar:
             on_change=sync_selector_ano
         )
 
-    # Asignamos las variables de control que usa la cuadrícula del calendario
     mes_sel = st.session_state.cal_mes
     ano_sel = st.session_state.cal_ano
         
