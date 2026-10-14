@@ -525,6 +525,33 @@ def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
         if cum_pnl <= -abs(limite_perdida):
             return str(op.get("fecha", ""))[:10]
     return None
+    
+def corregir_comisiones_indices(operaciones_raw):
+    # Lista expansiva con las variaciones de nombres de índices en diferentes brokers
+    indices_keywords = [
+        "US100", "NAS100", "NDX", "USTEC", "NASDAQ", # Nasdaq
+        "US30", "WS30", "DJI", "DOW",                 # Dow Jones
+        "US500", "SP500", "SPX",                      # S&P 500
+        "GER40", "DAX", "GER30", "DE40",              # DAX Alemán
+        "UK100", "FTSE",                              # FTSE UK
+        "JP225", "NIKKEI",                            # Nikkei
+        "FRA40", "EUSTX50", "AUS200"                  # Otros
+    ]
+    
+    for op in operaciones_raw:
+        simbolo = str(op.get("simbolo", "")).upper()
+        es_indice = any(keyword in simbolo for keyword in indices_keywords)
+        
+        if es_indice:
+            comision = float(op.get("comision") or 0.0)
+            if comision != 0.0:
+                resultado_actual = float(op.get("resultado") or 0.0)
+                # Al restar la comisión (que suele venir en negativo, ej: -4.00), 
+                # matemáticamente se suma de vuelta al resultado bruto (+4.00)
+                op["resultado"] = resultado_actual - comision
+                op["comision"] = 0.0
+                
+    return operaciones_raw
 
 @st.dialog("📝 Editar Datos Comerciales", width="large")
 def modal_editar_datos_negocio(cuentas_raw_list):
