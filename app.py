@@ -939,40 +939,92 @@ with tab_calendar:
         st.session_state.cal_ano = now.year
 
     # FLECHAS Y SELECTORES DE MES INTEGRADOS
-    c_arr_izq, c_m, c_arr_der, c_espacio, c_y = st.columns([0.5, 3, 0.5, 0.5, 3])
+# -------------------------------------------------------------------------
+    # FUNCIONES CALLBACK PARA NAVEGACIÓN DEL CALENDARIO
+    # -------------------------------------------------------------------------
+    def mes_anterior():
+        if st.session_state.cal_mes == 1:
+            st.session_state.cal_mes = 12
+            st.session_state.cal_ano -= 1
+        else:
+            st.session_state.cal_mes -= 1
+        st.session_state.selector_mes = st.session_state.cal_mes
+
+    def mes_siguiente():
+        if st.session_state.cal_mes == 12:
+            st.session_state.cal_mes = 1
+            st.session_state.cal_ano += 1
+        else:
+            st.session_state.cal_mes += 1
+        st.session_state.selector_mes = st.session_state.cal_mes
+
+    def sync_selector_mes():
+        st.session_state.cal_mes = st.session_state.selector_mes
+
+    def sync_selector_ano():
+        st.session_state.cal_ano = st.session_state.selector_ano
+
+    # Sincronización inicial de llaves en session_state
+    if "selector_mes" not in st.session_state:
+        st.session_state.selector_mes = st.session_state.cal_mes
+    if "selector_ano" not in st.session_state:
+        st.session_state.selector_ano = st.session_state.cal_ano
+
+    # Estilos CSS específicos para convertir los botones de flecha en iconos limpios
+    st.markdown("""
+    <style>
+        div[data-testid="stColumn"] div.stButton > button[key^="btn_nav_"] {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: var(--text-muted) !important;
+            font-size: 18px !important;
+            padding: 0 !important;
+            margin-top: 28px !important;
+            height: 40px !important;
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        div[data-testid="stColumn"] div.stButton > button[key^="btn_nav_"]:hover {
+            color: var(--primary-color) !important;
+            background-color: transparent !important;
+            border: none !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # DISPOSICIÓN COMPACTA: FLECHA IZQ - MES - FLECHA DER - ESPACIO - AÑO
+    c_arr_izq, c_m, c_arr_der, _, c_y = st.columns([0.25, 2.5, 0.25, 0.5, 2.5])
     
     with c_arr_izq:
-        # Espacio para alinear el botón con el input (debajo del label)
-        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
-        if st.button("❮", use_container_width=True, help="Mes anterior"):
-            if st.session_state.cal_mes == 1:
-                st.session_state.cal_mes = 12
-                st.session_state.cal_ano -= 1
-            else:
-                st.session_state.cal_mes -= 1
-            st.rerun()
+        st.button("❮", key="btn_nav_prev", on_click=mes_anterior, help="Mes anterior")
             
     with c_m:
-        mes_sel = st.selectbox("Mes:", range(1, 13), index=st.session_state.cal_mes - 1, format_func=lambda x: MESES_ES[x-1], key="selector_mes")
-        if mes_sel != st.session_state.cal_mes:
-            st.session_state.cal_mes = mes_sel
-            st.rerun()
-            
+        st.selectbox(
+            "Mes:", 
+            options=range(1, 13), 
+            format_func=lambda x: MESES_ES[x-1], 
+            key="selector_mes",
+            on_change=sync_selector_mes
+        )
+        
     with c_arr_der:
-        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
-        if st.button("❯", use_container_width=True, help="Mes siguiente"):
-            if st.session_state.cal_mes == 12:
-                st.session_state.cal_mes = 1
-                st.session_state.cal_ano += 1
-            else:
-                st.session_state.cal_mes += 1
-            st.rerun()
+        st.button("❯", key="btn_nav_next", on_click=mes_siguiente, help="Mes siguiente")
             
     with c_y:
-        ano_sel = st.number_input("Año:", min_value=2024, max_value=2030, value=st.session_state.cal_ano, key="selector_ano")
-        if ano_sel != st.session_state.cal_ano:
-            st.session_state.cal_ano = ano_sel
-            st.rerun()
+        st.number_input(
+            "Año:", 
+            min_value=2024, 
+            max_value=2030, 
+            key="selector_ano",
+            on_change=sync_selector_ano
+        )
+
+    # Asignamos las variables de control que usa la cuadrícula del calendario
+    mes_sel = st.session_state.cal_mes
+    ano_sel = st.session_state.cal_ano
         
     daily_stats = {}
     if not df_ops_trading.empty:
