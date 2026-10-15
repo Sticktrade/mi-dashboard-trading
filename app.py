@@ -970,10 +970,11 @@ with tab_calendar:
         st.session_state.selector_ano = st.session_state.cal_ano
 
     # Estilos CSS de alta prioridad para quitar bordes/fondos y alinear verticalmente
+    # Estilos CSS de alta prioridad restringidos SOLO a las flechas del calendario
     st.markdown("""
     <style>
-        div[data-testid="stHorizontalBlock"] > div:nth-child(1) button,
-        div[data-testid="stHorizontalBlock"] > div:nth-child(3) button {
+        div.stButton > button[key="btn_nav_prev"],
+        div.stButton > button[key="btn_nav_next"] {
             background-color: transparent !important;
             background: transparent !important;
             border: none !important;
@@ -989,8 +990,8 @@ with tab_calendar:
             align-items: center !important;
             justify-content: center !important;
         }
-        div[data-testid="stHorizontalBlock"] > div:nth-child(1) button:hover,
-        div[data-testid="stHorizontalBlock"] > div:nth-child(3) button:hover {
+        div.stButton > button[key="btn_nav_prev"]:hover,
+        div.stButton > button[key="btn_nav_next"]:hover {
             color: var(--primary-color) !important;
             background-color: transparent !important;
             border: none !important;
