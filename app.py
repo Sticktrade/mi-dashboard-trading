@@ -1842,20 +1842,28 @@ with tab_negocio:
         with col_pop1:
             firmas_activas = sum([1 for f in firmas_unicas if st.session_state.get(f"chk_firma_{f}")])
             with st.popover(f"🏢 Firmas ({firmas_activas}/{len(firmas_unicas)})", use_container_width=True):
+                # Botones minimalistas sin bordes
                 c_fall, c_fnone = st.columns(2)
-                c_fall.button("✅ Todos", key="btn_fall", on_click=set_all_firmas, args=(True,), use_container_width=True)
-                c_fnone.button("❌ Nada", key="btn_fnone", on_click=set_all_firmas, args=(False,), use_container_width=True)
-                st.divider()
+                c_fall.button("Todos", key="btn_fall", on_click=set_all_firmas, args=(True,), use_container_width=True, type="tertiary")
+                c_fnone.button("Ninguno", key="btn_fnone", on_click=set_all_firmas, args=(False,), use_container_width=True, type="tertiary")
+                
+                # Divisor sutil súper compacto
+                st.markdown("<hr style='margin: 0px 0px 12px 0px; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
+                
                 for f in firmas_unicas:
                     st.checkbox(f, key=f"chk_firma_{f}")
                     
         with col_pop2:
             etiq_activas = sum([1 for e in etiquetas_unicas if st.session_state.get(f"chk_etiq_{e}")])
             with st.popover(f"🏷️ Operativas ({etiq_activas}/{len(etiquetas_unicas)})", use_container_width=True):
+                # Botones minimalistas sin bordes
                 c_eall, c_enone = st.columns(2)
-                c_eall.button("✅ Todos", key="btn_eall", on_click=set_all_etiq, args=(True,), use_container_width=True)
-                c_enone.button("❌ Nada", key="btn_enone", on_click=set_all_etiq, args=(False,), use_container_width=True)
-                st.divider()
+                c_eall.button("Todos", key="btn_eall", on_click=set_all_etiq, args=(True,), use_container_width=True, type="tertiary")
+                c_enone.button("Ninguno", key="btn_enone", on_click=set_all_etiq, args=(False,), use_container_width=True, type="tertiary")
+                
+                # Divisor sutil súper compacto
+                st.markdown("<hr style='margin: 0px 0px 12px 0px; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
+                
                 for e in etiquetas_unicas:
                     st.checkbox(e, key=f"chk_etiq_{e}")
 
