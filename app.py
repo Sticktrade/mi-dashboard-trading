@@ -1857,23 +1857,39 @@ with tab_negocio:
         firmas_unicas = sorted(list(set([c.get("nombre_cuenta", "Desconocida") for c in cuentas_raw])))
         etiquetas_unicas = sorted(list(set([c.get("etiqueta") or "Manual" for c in cuentas_raw])))
         
-        col_btn, col_filter1, col_filter2 = st.columns([1.2, 1.5, 1.5])
+        # 1. Inicializar el estado de los filtros para que estén ACTIVADOS por defecto
+        for f in firmas_unicas:
+            if f"chk_firma_{f}" not in st.session_state:
+                st.session_state[f"chk_firma_{f}"] = True
+        for e in etiquetas_unicas:
+            if f"chk_etiq_{e}" not in st.session_state:
+                st.session_state[f"chk_etiq_{e}"] = True
+        
+        # 2. Layout compacto con Popovers (Desplegables)
+        col_btn, col_pop1, col_pop2 = st.columns([1.5, 1.2, 1.2])
+        
         with col_btn:
-            st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:2px;'></div>", unsafe_allow_html=True)
             if st.button("✏️ Editar Costos, Fechas & Etiquetas", use_container_width=True):
                 modal_editar_datos_negocio(cuentas_raw)
-        with col_filter1:
-            firmas_seleccionadas = st.multiselect(
-                "🏢 Firma / Prop Firm:",
-                options=firmas_unicas,
-                default=firmas_unicas
-            )
-        with col_filter2:
-            etiquetas_seleccionadas = st.multiselect(
-                "🏷️ Operativa / Etiqueta:",
-                options=etiquetas_unicas,
-                default=etiquetas_unicas
-            )
+                
+        with col_pop1:
+            firmas_activas = sum([1 for f in firmas_unicas if st.session_state.get(f"chk_firma_{f}")])
+            with st.popover(f"🏢 Firmas ({firmas_activas}/{len(firmas_unicas)})", use_container_width=True):
+                st.markdown("<span style='font-size:12px; color:var(--text-muted);'>Filtra por empresa:</span>", unsafe_allow_html=True)
+                for f in firmas_unicas:
+                    st.checkbox(f, key=f"chk_firma_{f}")
+                    
+        with col_pop2:
+            etiq_activas = sum([1 for e in etiquetas_unicas if st.session_state.get(f"chk_etiq_{e}")])
+            with st.popover(f"🏷️ Operativas ({etiq_activas}/{len(etiquetas_unicas)})", use_container_width=True):
+                st.markdown("<span style='font-size:12px; color:var(--text-muted);'>Filtra por estrategia:</span>", unsafe_allow_html=True)
+                for e in etiquetas_unicas:
+                    st.checkbox(e, key=f"chk_etiq_{e}")
+
+        # 3. Recopilar filtros seleccionados
+        firmas_seleccionadas = [f for f in firmas_unicas if st.session_state.get(f"chk_firma_{f}")]
+        etiquetas_seleccionadas = [e for e in etiquetas_unicas if st.session_state.get(f"chk_etiq_{e}")]
             
         cuentas_filtradas = [
             c for c in cuentas_raw 
