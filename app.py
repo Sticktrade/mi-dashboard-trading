@@ -1845,41 +1845,49 @@ with tab_estado_analytics:
                                     hide_index=True
                                 )
 # =============================================================================
-# TAB 3: NEGOCIO PROP FIRM & FLUJO DE CAJA (ROI)
+# TAB 3: NEGOCIO PROP FIRM & FLUJO DE CAJA (ROI) CON ETIQUETAS
 # =============================================================================
 with tab_negocio:
-    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-briefcase' style='color:var(--blue-accent); margin-right:6px;'></i> Flujo de Caja y Rentabilidad Real (ROI)</h3>", unsafe_allow_html=True)
-    st.caption("Usa el filtro para excluir cuentas gratuitas o de prueba y mantener la métrica de tu negocio real intacta.")
+    st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-briefcase' style='color:var(--blue-accent); margin-right:6px;'></i> Flujo de Caja, Rentabilidad Real (ROI) & Operativa</h3>", unsafe_allow_html=True)
+    st.caption("Filtra por firma y por tipo de operativa (Manual, Robot/EA, etc.) para analizar el rendimiento comercial de cada estrategia.")
     
     if not cuentas_raw:
         st.info("No hay cuentas en la base de datos para calcular las métricas comerciales.")
     else:
-        # --- 1. FILTRO DINÁMICO POR FIRMA ---
         firmas_unicas = sorted(list(set([c.get("nombre_cuenta", "Desconocida") for c in cuentas_raw])))
+        etiquetas_unicas = sorted(list(set([c.get("etiqueta") or "Manual" for c in cuentas_raw])))
         
-        col_btn, col_filter = st.columns([1, 2])
+        col_btn, col_filter1, col_filter2 = st.columns([1.2, 1.5, 1.5])
         with col_btn:
-            if st.button("✏️ Ingresar Costos y Fechas", use_container_width=True):
+            st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
+            if st.button("✏️ Editar Costos, Fechas & Etiquetas", use_container_width=True):
                 modal_editar_datos_negocio(cuentas_raw)
-        with col_filter:
+        with col_filter1:
             firmas_seleccionadas = st.multiselect(
-                "🔍 Filtrar cuentas (Elimina las gratuitas para limpiar tus métricas)",
+                "🏢 Firma / Prop Firm:",
                 options=firmas_unicas,
                 default=firmas_unicas
             )
+        with col_filter2:
+            etiquetas_seleccionadas = st.multiselect(
+                "🏷️ Operativa / Etiqueta:",
+                options=etiquetas_unicas,
+                default=etiquetas_unicas
+            )
             
-        # Creamos una lista filtrada según lo que hayas seleccionado
-        cuentas_filtradas = [c for c in cuentas_raw if c.get("nombre_cuenta", "Desconocida") in firmas_seleccionadas]
+        cuentas_filtradas = [
+            c for c in cuentas_raw 
+            if c.get("nombre_cuenta", "Desconocida") in firmas_seleccionadas
+            and (c.get("etiqueta") or "Manual") in etiquetas_seleccionadas
+        ]
         
         if not cuentas_filtradas:
-            st.warning("No hay cuentas que coincidan con el filtro seleccionado. Selecciona al menos una firma.")
+            st.warning("No hay cuentas que coincidan con los filtros seleccionados.")
         else:
-            # --- 2. CÁLCULO DE MÉTRICAS COMERCIALES GLOBALES (FILTRADAS) ---
             ids_filtrados = [str(c["account_number"]).strip() for c in cuentas_filtradas]
             
             gasto_total = sum([float(c.get("costo_inscripcion") or 0.0) for c in cuentas_filtradas])
             
-            # Filtramos retiros para que SOLO cuenten los de las firmas seleccionadas
             ops_retiros = [op for op in ops_raw if "WITHDRAWAL" in str(op.get("tipo", "")).upper() and str(op.get("account_number")).strip() in ids_filtrados]
             retiros_brutos = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros])
             retiros_netos_trader = retiros_brutos * 0.80 
@@ -1891,7 +1899,6 @@ with tab_negocio:
             cuentas_fondeadas_historicas = [c for c in cuentas_filtradas if "fondeada" in str(c.get("estado", "")).lower() or "funded" in str(c.get("estado", "")).lower()]
             win_rate_evaluaciones = (len(cuentas_fondeadas_historicas) / total_evaluaciones * 100) if total_evaluaciones > 0 else 0
             
-            # --- CÁLCULO DINÁMICO DE TIEMPOS Y AUTODETECCIÓN ---
             tiempos_fases = []
             tiempos_retiro = []
             tiempos_breach = []
@@ -1929,13 +1936,8 @@ with tab_negocio:
                             if dias_ret >= 0: tiempos_retiro.append(dias_ret)
                         except: pass
 
-            t_med_fase = sum(tiempos_fases) / len(tiempos_fases) if tiempos_fases else 0
-            t_med_ret = sum(tiempos_retiro) / len(tiempos_retiro) if tiempos_retiro else 0
-            t_med_breach = sum(tiempos_breach) / len(tiempos_breach) if tiempos_breach else 0
-
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- CÁLCULO DE CONTADORES DE ESTADO (KPIs) ---
             total_fase1 = len([c for c in cuentas_filtradas if "fase 1" in str(c.get("estado", "")).lower() or "phase 1" in str(c.get("estado", "")).lower()])
             total_fase2 = len([c for c in cuentas_filtradas if "fase 2" in str(c.get("estado", "")).lower() or "phase 2" in str(c.get("estado", "")).lower()])
             
@@ -1954,7 +1956,6 @@ with tab_negocio:
                 elif "fondeada" in estado_txt or "funded" in estado_txt:
                     total_aprobadas += 1
 
-            # 3. RENDERIZADO DE TARJETAS KPI COMERCIALES
             kpi_b1, kpi_b2, kpi_b3, kpi_b4 = st.columns(4)
             
             with kpi_b1:
@@ -1998,25 +1999,17 @@ with tab_negocio:
                 """, unsafe_allow_html=True)
 
             st.divider()
-            st.markdown("#### 🏢 Desglose de Retorno y Velocidad por Fase")
+            st.markdown("#### 🏢 Desglose por Cuenta, Operativa y Retorno")
             
-            # --- DISEÑO DE LA NUEVA TABLA HTML ---
             html_table = """
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
             
             <style>
             :root {
-                --primary-color: #2962FF; 
-                --bg-main: #0B0E14; 
-                --bg-sec: #111622;
-                --bg-card: #161D2E; 
-                --border-main: #1E293B; 
-                --border-light: #2D384D;
-                --text-main: #E2E8F0; 
-                --text-muted: #94A3B8; 
-                --win-color: #10B981;
-                --loss-color: #F43F5E; 
+                --primary-color: #2962FF; --bg-main: #0B0E14; --bg-sec: #111622;
+                --bg-card: #161D2E; --border-main: #1E293B; --border-light: #2D384D;
+                --text-main: #E2E8F0; --text-muted: #94A3B8; --win-color: #10B981; --loss-color: #F43F5E; 
             }
             body { margin: 0; padding: 4px; background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; }
             .roi-table-container { background-color: var(--bg-card); border: 1px solid var(--border-light); border-radius: 12px; overflow-x: auto; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
@@ -2030,6 +2023,8 @@ with tab_negocio:
             .b-funded { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
             .b-breached { background: rgba(244,63,94,0.15); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
             .b-challenge { background: rgba(41,98,255,0.15); color: #2962FF; border: 1px solid rgba(41,98,255,0.2); }
+            
+            .badge-tag { background: var(--bg-sec); color: var(--blue-accent); border: 1px solid var(--border-light); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
             
             .val-pos { color: #10B981; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
             .val-neg { color: #F43F5E; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
@@ -2045,6 +2040,7 @@ with tab_negocio:
                     <thead>
                         <tr>
                             <th>Firma / Fase</th>
+                            <th>Operativa</th>
                             <th>Estado</th>
                             <th>Línea de Tiempo</th>
                             <th>Costo</th>
@@ -2059,6 +2055,7 @@ with tab_negocio:
             for c in cuentas_filtradas:
                 id_c = str(c["account_number"])
                 nombre = c.get("nombre_cuenta", "Desconocida")
+                tag_str = c.get("etiqueta") or "Manual"
                 estado = str(c.get("estado", "Desconocido")).lower()
                 costo = float(c.get("costo_inscripcion") or 0.0)
                 fc = c.get("fecha_compra")
@@ -2129,6 +2126,7 @@ with tab_negocio:
                 html_table += f"""
                     <tr>
                         <td><span class='acc-name'>{nombre}</span><span class='acc-id'>#{id_c}</span></td>
+                        <td><span class='badge-tag'>{tag_str}</span></td>
                         <td><span class='badge-estado {badge_cls}'>{estado_lbl}</span></td>
                         <td>{dias_str}</td>
                         <td class="num-cell">${costo:,.2f}</td>
