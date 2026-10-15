@@ -572,9 +572,9 @@ def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
             return str(op.get("fecha", ""))[:10]
     return None
 
-@st.dialog("📝 Editar Datos Comerciales", width="large")
+@st.dialog("📝 Editar Datos Comerciales y Etiquetas", width="large")
 def modal_editar_datos_negocio(cuentas_raw_list):
-    st.markdown("**Regla de oro:** Pon el costo real SÓLO en la Fase 1. Para Fase 2 y Fondeadas pon **$0.00**. En las fechas, pon el día que empezaste a operar esa cuenta específica.")
+    st.markdown("**Consejo:** En *Etiqueta / Operativa* puedes escribir cómo ejecutas la cuenta (ej. `Manual`, `EA / Robot`, `Algorítmico`, `Híbrido`). En la pestaña Negocio podrás filtrar por estas etiquetas.")
     
     datos_edicion = []
     for c in cuentas_raw_list:
@@ -585,6 +585,7 @@ def modal_editar_datos_negocio(cuentas_raw_list):
         datos_edicion.append({
             "account_number": str(c["account_number"]),
             "nombre_cuenta": c.get("nombre_cuenta", "Cuenta"),
+            "etiqueta": c.get("etiqueta") or "Manual",
             "costo_inscripcion": float(c.get("costo_inscripcion") or 0.0),
             "fecha_compra": fc_date
         })
@@ -596,6 +597,7 @@ def modal_editar_datos_negocio(cuentas_raw_list):
         column_config={
             "account_number": st.column_config.TextColumn("ID", disabled=True),
             "nombre_cuenta": st.column_config.TextColumn("Firma / Fase", disabled=True),
+            "etiqueta": st.column_config.SelectboxColumn("Etiqueta / Operativa", options=["Manual", "EA / Robot", "Algorítmico", "Híbrido", "Prueba / Demo"], required=True),
             "costo_inscripcion": st.column_config.NumberColumn("Costo (Solo F1)", min_value=0.0, format="$%.2f", step=0.01),
             "fecha_compra": st.column_config.DateColumn("Fecha Inicio de Fase"),
         },
@@ -611,7 +613,10 @@ def modal_editar_datos_negocio(cuentas_raw_list):
             try:
                 for index, row in edited_df.iterrows():
                     acc_id = row["account_number"]
-                    update_data = {"costo_inscripcion": float(row["costo_inscripcion"])}
+                    update_data = {
+                        "costo_inscripcion": float(row["costo_inscripcion"]),
+                        "etiqueta": str(row["etiqueta"])
+                    }
                     
                     fecha_val = row["fecha_compra"]
                     if pd.notnull(fecha_val) and str(fecha_val).strip() not in ["", "None", "NaT"]:
