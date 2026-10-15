@@ -944,7 +944,7 @@ with tab_calendar:
         st.session_state.cal_ano = now.year
 
     # FLECHAS Y SELECTORES DE MES INTEGRADOS
-# -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # FUNCIONES CALLBACK PARA NAVEGACIÓN DEL CALENDARIO
     # -------------------------------------------------------------------------
     def mes_anterior():
@@ -974,62 +974,21 @@ with tab_calendar:
     if "selector_ano" not in st.session_state:
         st.session_state.selector_ano = st.session_state.cal_ano
 
-    # Estilos CSS de alta prioridad para quitar bordes/fondos y alinear verticalmente
-    # Estilos CSS de alta prioridad restringidos SOLO a las flechas del calendario
-    st.markdown("""
-    <style>
-        div.stButton > button[key="btn_nav_prev"],
-        div.stButton > button[key="btn_nav_next"] {
-            background-color: transparent !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            color: var(--text-muted) !important;
-            font-size: 22px !important;
-            font-weight: bold !important;
-            padding: 0 !important;
-            margin-top: 22px !important;
-            height: 42px !important;
-            width: 100% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        div.stButton > button[key="btn_nav_prev"]:hover,
-        div.stButton > button[key="btn_nav_next"]:hover {
-            color: var(--primary-color) !important;
-            background-color: transparent !important;
-            border: none !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # DISPOSICIÓN COMPACTA
-    c_arr_izq, c_m, c_arr_der, _, c_y = st.columns([0.25, 2.5, 0.25, 0.5, 2.5])
+    # DISPOSICIÓN COMPACTA CON ALINEACIÓN VERTICAL INFERIOR NATIVA
+    c_arr_izq, c_m, c_arr_der, _, c_y = st.columns([0.25, 2.5, 0.25, 0.5, 2.5], vertical_alignment="bottom")
     
     with c_arr_izq:
-        st.button("❮", key="btn_nav_prev", on_click=mes_anterior, help="Mes anterior")
+        # type="tertiary" hace que el botón no tenga fondo ni bordes
+        st.button("❮", key="btn_nav_prev", on_click=mes_anterior, help="Mes anterior", type="tertiary", use_container_width=True)
             
     with c_m:
-        st.selectbox(
-            "Mes:", 
-            options=range(1, 13), 
-            format_func=lambda x: MESES_ES[x-1], 
-            key="selector_mes",
-            on_change=sync_selector_mes
-        )
+        st.selectbox("Mes:", options=range(1, 13), format_func=lambda x: MESES_ES[x-1], key="selector_mes", on_change=sync_selector_mes)
         
     with c_arr_der:
-        st.button("❯", key="btn_nav_next", on_click=mes_siguiente, help="Mes siguiente")
+        st.button("❯", key="btn_nav_next", on_click=mes_siguiente, help="Mes siguiente", type="tertiary", use_container_width=True)
             
     with c_y:
-        st.number_input(
-            "Año:", 
-            min_value=2024, 
-            max_value=2030, 
-            key="selector_ano",
-            on_change=sync_selector_ano
-        )
+        st.number_input("Año:", min_value=2024, max_value=2030, key="selector_ano", on_change=sync_selector_ano)
 
     mes_sel = st.session_state.cal_mes
     ano_sel = st.session_state.cal_ano
