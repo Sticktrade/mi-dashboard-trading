@@ -40,6 +40,7 @@ st.markdown("""
         --win-color: #10B981;
         --loss-color: #F43F5E;
         --be-color: #64748B;
+        --passed-color: #EAB308;
         --blue-accent: #2962FF;
     }
 
@@ -141,7 +142,7 @@ st.markdown("""
         background-color: var(--bg-card) !important;
     }
     
-    /* KPI CARDS (Rediseñadas tipo Tailwind) */
+    /* KPI CARDS */
     .kpi-card {
         background-color: rgba(22, 29, 46, 0.9);
         border: 1px solid var(--border-main);
@@ -187,10 +188,12 @@ st.markdown("""
     .badge-win { background-color: rgba(16, 185, 129, 0.15); color: var(--win-color); border-color: rgba(16, 185, 129, 0.2); }
     .badge-loss { background-color: rgba(244, 63, 94, 0.15); color: var(--loss-color); border-color: rgba(244, 63, 94, 0.2); }
     .badge-be { background-color: rgba(100, 116, 139, 0.15); color: var(--be-color); border-color: rgba(100, 116, 139, 0.2); }
+    .badge-passed { background-color: rgba(234, 179, 8, 0.15); color: var(--passed-color); border-color: rgba(234, 179, 8, 0.25); }
 
     .color-win { color: var(--win-color) !important; font-weight: 700; }
     .color-loss { color: var(--loss-color) !important; font-weight: 700; }
     .color-be { color: var(--be-color) !important; font-weight: 700; }
+    .color-passed { color: var(--passed-color) !important; font-weight: 700; }
     .color-blue { color: var(--blue-accent) !important; font-weight: 700; }
 
     div[data-testid="stHorizontalBlock"] {
@@ -325,11 +328,7 @@ def process_raw_operations(ops_list):
     return processed_ops
 
 
-# =============================================================================
-# FUNCIONES DE LIMPIEZA Y PREPARACIÓN DE DATOS
-# =============================================================================
 def corregir_comisiones_indices(operaciones_raw):
-    # Lista expansiva con las variaciones de nombres de índices
     indices_keywords = [
         "US100", "NAS100", "NDX", "USTEC", "NASDAQ", 
         "US30", "WS30", "DJI", "DOW",                 
@@ -341,24 +340,15 @@ def corregir_comisiones_indices(operaciones_raw):
     ]
     
     for op in operaciones_raw:
-        # Aquí 'simbolo' ya fue estandarizado por process_raw_operations
         simbolo = str(op.get("simbolo", "")).upper()
         es_indice = any(keyword in simbolo for keyword in indices_keywords)
         
         if es_indice:
-            # En process_raw_operations, la comisión se guarda en 'comision_calc' en valor absoluto
             comision_cobrada = float(op.get("comision_calc", 0.0))
-            
             if comision_cobrada > 0.0:
-                # El 'resultado' actual ya tiene la comisión descontada (raw_profit - comision_calc)
-                # Así que simplemente le sumamos la comisión de vuelta al 'resultado'
                 resultado_actual = float(op.get("resultado", 0.0))
                 op["resultado"] = resultado_actual + comision_cobrada
-                
-                # Dejamos la comisión oficial en cero
                 op["comision_calc"] = 0.0
-                
-                # Por limpieza extra, si quedaron las llaves raw, las borramos también
                 for k in ["comision", "commission", "commissions"]:
                     if k in op: op[k] = 0.0
                 
@@ -369,36 +359,26 @@ def corregir_comisiones_indices(operaciones_raw):
 def cargar_datos():
     res_cuentas = supabase.table("cuentas").select("*").execute()
     
-    # Paginación para saltar el límite de seguridad del servidor de Supabase
     todas_las_operaciones = []
     inicio = 0
     paso = 1000
     
     while True:
-        # Pedimos bloques de 1,000 en 1,000
         res_ops = supabase.table("operaciones").select("*").order("fecha", desc=True).range(inicio, inicio + paso - 1).execute()
-        
         datos_bloque = res_ops.data
         if not datos_bloque:
             break
-            
         todas_las_operaciones.extend(datos_bloque)
-        
-        # Si el bloque devuelto trae menos de 1000, significa que ya llegamos al final de la base de datos
         if len(datos_bloque) < paso:
             break
-            
         inicio += paso
         
     if todas_las_operaciones:
-        # 1. Procesamos los datos crudos (crea comision_calc y limpia los diccionarios)
         todas_las_operaciones = process_raw_operations(todas_las_operaciones)
-        # 2. Inyectamos la limpieza de comisiones de índices identificando a los que no aplican
         todas_las_operaciones = corregir_comisiones_indices(todas_las_operaciones)
         
     return res_cuentas.data, todas_las_operaciones
 
-# Ejecutamos la carga de datos
 cuentas_raw, ops_raw = cargar_datos()
 
 def parse_capturas(capturas_data):
@@ -476,73 +456,6 @@ def mostrar_modal_zoom(cap):
         else:
             st.caption("Sin notas técnicas registradas.")
 
-@st.dialog("⚙️ Gestionar Estado de Cuentas", width="large")
-def modal_gestionar_estados(cuentas_raw_list):
-    st.markdown("Si la automatización falló, puedes forzar el cambio de estado de tus cuentas manualmente aquí. **Esto actualizará tu base de datos en Supabase.**")
-    st.divider()
-    
-    cambios = {}
-    
-    # Crear una fila por cada cuenta
-    for c in cuentas_raw_list:
-        acc_id = str(c["account_number"])
-        acc_name = c.get("nombre_cuenta", "Cuenta")
-        est_actual = str(c.get("estado", "Challenge"))
-        
-        # Determinar el índice actual para el selectbox
-        est_lower = est_actual.lower()
-        if "breached" in est_lower or "quemada" in est_lower or "eliminada" in est_lower:
-            idx = 2
-        elif "fondeada" in est_lower or "funded" in est_lower:
-            idx = 1
-        else:
-            idx = 0
-            
-        opciones = ["Challenge", "Funded", "Breached"]
-        
-        # 1. ENVOLVEMOS LA FILA EN UN RECUADRO CON BORDE
-        with st.container(border=True):
-            
-            # 2. AJUSTAMOS LAS COLUMNAS PARA REDUCIR EL ESPACIO VACÍO
-            col_txt, col_sel = st.columns([3, 2]) 
-            
-            with col_txt:
-                # Mejoramos el diseño de la etiqueta para que se vea más profesional
-                st.markdown(f"""
-                <div style='margin-top:6px; font-size:15px; font-weight:600;'>
-                    {acc_name} 
-                    <code style='font-size:12px; margin-left:8px; color:var(--text-muted); background-color:var(--bg-main); padding:3px 6px; border-radius:6px; border: 1px solid var(--border-light);'>#{acc_id}</code>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            with col_sel:
-                nuevo_estado = st.selectbox(
-                    "Estado", 
-                    options=opciones, 
-                    index=idx, 
-                    key=f"edit_est_{acc_id}",
-                    label_visibility="collapsed"
-                )
-                
-                if nuevo_estado != opciones[idx]:
-                    cambios[acc_id] = nuevo_estado
-                
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    if st.button("💾 Guardar Cambios en Base de Datos", use_container_width=True):
-        if cambios:
-            with st.spinner("Actualizando base de datos..."):
-                try:
-                    for a_id, n_est in cambios.items():
-                        supabase.table("cuentas").update({"estado": n_est}).eq("account_number", a_id).execute()
-                    st.success("¡Estados actualizados correctamente!")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al actualizar la base de datos: {e}")
-        else:
-            st.info("No realizaste ningún cambio.")
-
 # =============================================================================
 # FUNCIONES DE NEGOCIO Y AUTODETECCIÓN
 # =============================================================================
@@ -571,6 +484,100 @@ def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
         if cum_pnl <= -abs(limite_perdida):
             return str(op.get("fecha", ""))[:10]
     return None
+
+def es_cuenta_pasada(c):
+    """
+    Detecta si una cuenta de fase ya fue superada / pasada a otra fase.
+    Verifica tanto el estado explícito como si ya alcanzó su objetivo de profit.
+    """
+    est = str(c.get("estado", "")).strip().lower()
+    
+    # 1. Por estado explícito
+    if any(k in est for k in ["passed", "pasada", "superada", "aprobada", "completada", "phase passed", "fase pasada"]):
+        return True
+        
+    # 2. Por cumplimiento de profit target si es de tipo challenge y no breached ni funded
+    if not ("fondeada" in est or "funded" in est or "breached" in est or "quemada" in est or "eliminada" in est):
+        obj = float(c.get("objetivo_profit", 0.0) or 0.0)
+        bal_ini = float(c.get("balance_inicial", 0.0) or 0.0)
+        bal_act = float(c.get("balance", 0.0) or 0.0)
+        ganancia = bal_act - bal_ini
+        id_c = str(c.get("account_number", "")).strip()
+        
+        if obj > 0 and ganancia >= obj:
+            return True
+        if obj > 0 and obtener_fecha_meta_alcanzada(id_c, obj) is not None:
+            return True
+            
+    return False
+
+@st.dialog("⚙️ Gestionar Estado de Cuentas", width="large")
+def modal_gestionar_estados(cuentas_raw_list):
+    st.markdown("Actualiza el estado de tus cuentas. Marca las cuentas como **Passed** para que dejen de contarse en tu operativa activa sin perder su historial.")
+    st.divider()
+    
+    cambios = {}
+    
+    for c in cuentas_raw_list:
+        acc_id = str(c["account_number"])
+        acc_name = c.get("nombre_cuenta", "Cuenta")
+        est_actual = str(c.get("estado", "Challenge"))
+        
+        est_lower = est_actual.lower()
+        if "breached" in est_lower or "quemada" in est_lower or "eliminada" in est_lower:
+            idx = 3
+        elif "passed" in est_lower or "superada" in est_lower or "pasada" in est_lower or es_cuenta_pasada(c):
+            idx = 2
+        elif "fondeada" in est_lower or "funded" in est_lower:
+            idx = 1
+        else:
+            idx = 0
+            
+        opciones = ["Challenge", "Funded", "Passed", "Breached"]
+        
+        with st.container(border=True):
+            col_txt, col_sel = st.columns([3, 2]) 
+            
+            with col_txt:
+                badge_info = ""
+                if es_cuenta_pasada(c) and "passed" not in est_lower:
+                    badge_info = "<span style='color:#EAB308; font-size:11px; margin-left:6px;'><i class='fa-solid fa-trophy'></i> Meta alcanzada</span>"
+                    
+                st.markdown(f"""
+                <div style='margin-top:6px; font-size:15px; font-weight:600;'>
+                    {acc_name} 
+                    <code style='font-size:12px; margin-left:8px; color:var(--text-muted); background-color:var(--bg-main); padding:3px 6px; border-radius:6px; border: 1px solid var(--border-light);'>#{acc_id}</code>
+                    {badge_info}
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col_sel:
+                nuevo_estado = st.selectbox(
+                    "Estado", 
+                    options=opciones, 
+                    index=idx, 
+                    key=f"edit_est_{acc_id}",
+                    label_visibility="collapsed"
+                )
+                
+                if nuevo_estado != est_actual:
+                    cambios[acc_id] = nuevo_estado
+                
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if st.button("💾 Guardar Cambios en Base de Datos", use_container_width=True):
+        if cambios:
+            with st.spinner("Actualizando base de datos..."):
+                try:
+                    for a_id, n_est in cambios.items():
+                        supabase.table("cuentas").update({"estado": n_est}).eq("account_number", a_id).execute()
+                    st.success("¡Estados actualizados correctamente!")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al actualizar la base de datos: {e}")
+        else:
+            st.info("No realizaste ningún cambio.")
 
 @st.dialog("📝 Editar Datos Comerciales y Etiquetas", width="large")
 def modal_editar_datos_negocio(cuentas_raw_list):
@@ -634,8 +641,9 @@ def modal_editar_datos_negocio(cuentas_raw_list):
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al guardar: {e}")
+
 # -----------------------------------------------------------------------------
-# 3. BARRA LATERAL / ORGANIZACIÓN DE CUENTAS
+# 3. BARRA LATERAL / ORGANIZACIÓN DE CUENTAS EN 4 ESTADOS
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("""
 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1rem;">
@@ -660,19 +668,24 @@ if st.sidebar.button("⚙️ Gestionar Estados", use_container_width=True):
         modal_gestionar_estados(cuentas_raw)
     else:
         st.sidebar.warning("No hay cuentas cargadas.")
-# ------------------------------------------
 
+# -----------------------------------------------------------------------------
+# CLASIFICACIÓN EN 4 GRUPOS: FUNDED, CHALLENGES ACTIVOS, PASSED, BREACHED
+# -----------------------------------------------------------------------------
 cuentas_funded = []
 cuentas_challenges = []
+cuentas_passed = []
 cuentas_breached = []
 
 if cuentas_raw:
     for c in cuentas_raw:
         est = str(c.get("estado", "")).strip().lower()
-        if "fondeada" in est or "funded" in est:
-            cuentas_funded.append(c)
-        elif "breached" in est or "quemada" in est or "eliminada" in est:
+        if "breached" in est or "quemada" in est or "eliminada" in est:
             cuentas_breached.append(c)
+        elif "fondeada" in est or "funded" in est:
+            cuentas_funded.append(c)
+        elif es_cuenta_pasada(c):
+            cuentas_passed.append(c)
         else:
             cuentas_challenges.append(c)
 
@@ -685,49 +698,64 @@ def agrupar_por_nombre(lista_cuentas):
         grupos[n].append(c)
     return grupos
 
+# -----------------------------------------------------------------------------
+# INICIALIZACIÓN: SOLO LAS CUENTAS ACTIVAS SE MARCAN POR DEFECTO
+# -----------------------------------------------------------------------------
 if "init_accounts_state" not in st.session_state:
     st.session_state["init_accounts_state"] = True
     if cuentas_raw:
+        ids_pasadas_o_breached = set([str(c["account_number"]) for c in (cuentas_passed + cuentas_breached)])
         for c in cuentas_raw:
             acc_id = str(c["account_number"])
             nombre_c = str(c.get("nombre_cuenta", "")).lower()
-            est_c = str(c.get("estado", "")).lower()
             key_c = f"chk_{acc_id}"
             
-            if "breached" in est_c or "quemada" in est_c or "nova" in nombre_c:
+            # Cuentas pasadas y quemadas NO se seleccionan por defecto
+            if acc_id in ids_pasadas_o_breached or "nova" in nombre_c:
                 st.session_state[key_c] = False
             else:
                 st.session_state[key_c] = True
 
-        for prefix, lista_cat in [("funded", cuentas_funded), ("challenges", cuentas_challenges), ("breached", cuentas_breached)]:
+        for prefix, lista_cat in [("funded", cuentas_funded), ("challenges", cuentas_challenges), ("passed", cuentas_passed), ("breached", cuentas_breached)]:
             for grp_n, acc_list in agrupar_por_nombre(lista_cat).items():
                 child_ids = [str(a["account_number"]) for a in acc_list]
                 st.session_state[f"master_{prefix}_{grp_n}"] = all(st.session_state.get(f"chk_{cid}", False) for cid in child_ids)
 
-col_b1, col_b2 = st.sidebar.columns(2)
-if col_b1.button("Todas", use_container_width=True):
+# -----------------------------------------------------------------------------
+# BOTONES RÁPIDOS DE FILTRADO
+# -----------------------------------------------------------------------------
+if st.sidebar.button("🟢 Solo Cuentas Activas", use_container_width=True, help="Selecciona solo cuentas Fondeadas y Challenges en curso (excluye Pasadas y Breached)"):
     if cuentas_raw:
         for c in cuentas_funded + cuentas_challenges:
-            acc_id = str(c["account_number"])
-            st.session_state[f"chk_{acc_id}"] = True
-        for c in cuentas_breached:
-            acc_id = str(c["account_number"])
-            st.session_state[f"chk_{acc_id}"] = False
+            st.session_state[f"chk_{str(c['account_number'])}"] = True
+        for c in cuentas_passed + cuentas_breached:
+            st.session_state[f"chk_{str(c['account_number'])}"] = False
 
         for grp_n in agrupar_por_nombre(cuentas_funded).keys():
             st.session_state[f"master_funded_{grp_n}"] = True
         for grp_n in agrupar_por_nombre(cuentas_challenges).keys():
             st.session_state[f"master_challenges_{grp_n}"] = True
+        for grp_n in agrupar_por_nombre(cuentas_passed).keys():
+            st.session_state[f"master_passed_{grp_n}"] = False
         for grp_n in agrupar_por_nombre(cuentas_breached).keys():
             st.session_state[f"master_breached_{grp_n}"] = False
+        st.rerun()
+
+col_b1, col_b2 = st.sidebar.columns(2)
+if col_b1.button("Todas", use_container_width=True):
+    if cuentas_raw:
+        for c in cuentas_raw:
+            st.session_state[f"chk_{str(c['account_number'])}"] = True
+        for prefix in ["funded", "challenges", "passed", "breached"]:
+            for grp_n in agrupar_por_nombre(eval(f"cuentas_{prefix}")).keys():
+                st.session_state[f"master_{prefix}_{grp_n}"] = True
         st.rerun()
 
 if col_b2.button("Ninguna", use_container_width=True):
     if cuentas_raw:
         for c in cuentas_raw:
-            acc_id = str(c["account_number"])
-            st.session_state[f"chk_{acc_id}"] = False
-        for prefix in ["funded", "challenges", "breached"]:
+            st.session_state[f"chk_{str(c['account_number'])}"] = False
+        for prefix in ["funded", "challenges", "passed", "breached"]:
             for grp_n in agrupar_por_nombre(eval(f"cuentas_{prefix}")).keys():
                 st.session_state[f"master_{prefix}_{grp_n}"] = False
         st.rerun()
@@ -760,7 +788,7 @@ def render_seccion_cuentas(prefix, grupos_dict):
             acc_id = str(acc["account_number"])
             key = f"chk_{acc_id}"
             label = f"{acc['nombre_cuenta']} — ${acc['balance']:,.2f}"
-            if st.checkbox(label, value=st.session_state.get(key, True), key=key, on_change=cb_child):
+            if st.checkbox(label, value=st.session_state.get(key, False), key=key, on_change=cb_child):
                 cuentas_seleccionadas_ids.append(acc_id)
         else:
             tot_bal = sum(a["balance"] for a in lista_accs)
@@ -775,7 +803,7 @@ def render_seccion_cuentas(prefix, grupos_dict):
                 for acc in lista_accs:
                     acc_id = str(acc["account_number"])
                     cid_key = f"chk_{acc_id}"
-                    child_label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc['estado']}]"
+                    child_label = f"#{acc_id} — ${acc['balance']:,.2f} [{acc.get('estado', 'Challenge')}]"
                     if st.checkbox(
                         child_label,
                         value=st.session_state.get(cid_key, False),
@@ -784,19 +812,25 @@ def render_seccion_cuentas(prefix, grupos_dict):
                     ):
                         cuentas_seleccionadas_ids.append(acc_id)
 
-with st.sidebar.expander("🟢 Funded", expanded=True):
+with st.sidebar.expander(f"🟢 Funded ({len(cuentas_funded)})", expanded=True):
     if not cuentas_funded:
-        st.caption("Sin cuentas fondeadas.")
+        st.caption("Sin cuentas fondeadas activas.")
     else:
         render_seccion_cuentas("funded", agrupar_por_nombre(cuentas_funded))
 
-with st.sidebar.expander("🎯 Challenges", expanded=True):
+with st.sidebar.expander(f"🎯 Challenges en Curso ({len(cuentas_challenges)})", expanded=True):
     if not cuentas_challenges:
-        st.caption("Sin cuentas challenge.")
+        st.caption("Sin challenges activos.")
     else:
         render_seccion_cuentas("challenges", agrupar_por_nombre(cuentas_challenges))
 
-with st.sidebar.expander("🔻 Breached", expanded=False):
+with st.sidebar.expander(f"🏆 Superadas / Pasadas ({len(cuentas_passed)})", expanded=False):
+    if not cuentas_passed:
+        st.caption("Sin cuentas pasadas a otra fase.")
+    else:
+        render_seccion_cuentas("passed", agrupar_por_nombre(cuentas_passed))
+
+with st.sidebar.expander(f"🔻 Breached ({len(cuentas_breached)})", expanded=False):
     if not cuentas_breached:
         st.caption("Sin cuentas breached.")
     else:
@@ -908,7 +942,7 @@ with kpi5:
     <div class="kpi-card">
         <div class="kpi-header"><span>Cuentas Filtro</span><i class="fa-solid fa-layer-group"></i></div>
         <div class="kpi-value color-blue">{cant_cuentas}</div>
-        <div class="kpi-meta" style="color:var(--text-muted); font-family:'Inter', sans-serif;">Fondeadas & Challenges</div>
+        <div class="kpi-meta" style="color:var(--text-muted); font-family:'Inter', sans-serif;">Activas en Vista</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -937,16 +971,11 @@ with tab_calendar:
     now = datetime.datetime.now()
     MESES_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
-    # Inicialización de estado para el calendario si no existe
     if "cal_mes" not in st.session_state:
         st.session_state.cal_mes = now.month
     if "cal_ano" not in st.session_state:
         st.session_state.cal_ano = now.year
 
-    # FLECHAS Y SELECTORES DE MES INTEGRADOS
-    # -------------------------------------------------------------------------
-    # FUNCIONES CALLBACK PARA NAVEGACIÓN DEL CALENDARIO
-    # -------------------------------------------------------------------------
     def mes_anterior():
         if st.session_state.cal_mes == 1:
             st.session_state.cal_mes = 12
@@ -974,11 +1003,9 @@ with tab_calendar:
     if "selector_ano" not in st.session_state:
         st.session_state.selector_ano = st.session_state.cal_ano
 
-    # DISPOSICIÓN COMPACTA CON ALINEACIÓN VERTICAL INFERIOR NATIVA
     c_arr_izq, c_m, c_arr_der, _, c_y = st.columns([0.25, 2.5, 0.25, 0.5, 2.5], vertical_alignment="bottom")
     
     with c_arr_izq:
-        # type="tertiary" hace que el botón no tenga fondo ni bordes
         st.button("❮", key="btn_nav_prev", on_click=mes_anterior, help="Mes anterior", type="tertiary", use_container_width=True)
             
     with c_m:
@@ -1200,7 +1227,6 @@ with tab_calendar:
     
     st.components.v1.html(html_grid, height=660, scrolling=True)
     
-    # MÉTRICAS DEL MES SELECCIONADO
     pct_mes = (total_pnl_mes / tot_inicial * 100) if tot_inicial > 0 else 0.0
 
     mc1, mc2, mc3, mc4 = st.columns(4)
@@ -1404,7 +1430,7 @@ with tab_calendar:
                             <span style='font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
-                    tooltip_m += "</div>"
+                    tooltip_html = tooltip_m + "</div>"
             tooltip_m += "</div>"
 
             html_annual += f"""
@@ -1434,7 +1460,6 @@ with tab_calendar:
     
     st.components.v1.html(html_annual, height=560, scrolling=True)
 
-    # MÉTRICAS DEL AÑO SELECCIONADO
     pct_ano = (total_pnl_ano / tot_inicial * 100) if tot_inicial > 0 else 0.0
 
     mc_a1, mc_a2, mc_a3, mc_a4 = st.columns(4)
@@ -1452,8 +1477,7 @@ with tab_estado_analytics:
     if df_ops_trading.empty:
         st.info("ℹ️ No hay operaciones registradas para las cuentas seleccionadas.")
     else:
-        # 1. RENDIMIENTO GLOBAL (ACTIVADO POR DEFECTO CON value=True)
-        if st.toggle("🌍 Mostrar Rendimiento Consolidado Global (Todas las Cuentas)", value=True, key="tgl_global_analytics"):
+        if st.toggle("🌍 Mostrar Rendimiento Consolidado Global (Cuentas Seleccionadas)", value=True, key="tgl_global_analytics"):
             filtro_periodo_global = st.radio(
                 "📅 Rango Temporal Global:",
                 options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
@@ -1547,28 +1571,29 @@ with tab_estado_analytics:
 
         st.divider()
 
-        # 2. LÓGICA DE ORDENAMIENTO (Fondeada+ > Challenge+ > Fondeada- > Challenge-)
         def obtener_llave_orden(c):
             bal_ini = float(c.get("balance_inicial", 0.0))
             bal_act = float(c.get("balance", 0.0))
             ganancia = bal_act - bal_ini
             estado_t = str(c.get("estado", "Fase 1")).lower()
             es_fondeada = ("fondeada" in estado_t or "funded" in estado_t)
+            es_pas = es_cuenta_pasada(c)
             
             if es_fondeada and ganancia > 0:
                 grupo = 1
-            elif not es_fondeada and ganancia > 0:
+            elif not es_fondeada and not es_pas and ganancia > 0:
                 grupo = 2
-            elif es_fondeada and ganancia <= 0:
+            elif es_pas:
                 grupo = 3
-            else:
+            elif es_fondeada and ganancia <= 0:
                 grupo = 4
+            else:
+                grupo = 5
                 
             return (grupo, -ganancia)
 
         cuentas_ordenadas = sorted(cuentas, key=obtener_llave_orden) if cuentas else []
 
-        # 3. RENDERIZADO DE CUENTAS INDIVIDUALES
         if not cuentas_ordenadas:
             st.info("No hay cuentas seleccionadas.")
         else:
@@ -1585,10 +1610,15 @@ with tab_estado_analytics:
                 p_act = float(c.get("perdida_diaria_actual", 0.0))
                 margen_max = p_max - p_act
                 
-                estado_tag = str(c.get("estado", "Fase 1"))
+                es_pasada = es_cuenta_pasada(c)
+                estado_tag = "PASSED" if es_pasada else str(c.get("estado", "Fase 1"))
                 es_fondeada = ("fondeada" in estado_tag.lower() or "funded" in estado_tag.lower())
                 
-                with st.expander(f"🔹 {acc_name.upper()} | ID #{acc_num_str} — [{estado_tag.upper()}] | Profit: ${ganancia:,.2f}", expanded=True):
+                header_icon = "🏆" if es_pasada else "🔹"
+                with st.expander(f"{header_icon} {acc_name.upper()} | ID #{acc_num_str} — [{estado_tag.upper()}] | Profit: ${ganancia:,.2f}", expanded=not es_pasada):
+                    
+                    bg_tag_color = "var(--passed-color)" if es_pasada else "var(--primary-color)"
+                    txt_tag_color = "#0B0E14" if es_pasada else "#FFFFFF"
                     
                     st.markdown(f"""
                     <div style="background-color: var(--bg-sec); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
@@ -1597,12 +1627,19 @@ with tab_estado_analytics:
                             <span style="font-size: 13px; color: var(--text-muted); margin-left: 12px; font-weight: 600; font-family:'JetBrains Mono', monospace;">ID #{acc_num_str}</span>
                         </div>
                         <div>
-                            <span style="background-color: var(--primary-color); color: #FFFFFF; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">{estado_tag}</span>
+                            <span style="background-color: {bg_tag_color}; color: {txt_tag_color}; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase;">{estado_tag}</span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # KPI de Balance
+                    if es_pasada:
+                        st.markdown("""
+                        <div style="background-color: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #EAB308; font-weight: 700; font-size: 13px;"><i class="fa-solid fa-trophy" style="margin-right: 6px;"></i> Fase superada con éxito y transferida.</span>
+                            <span style="color: var(--text-muted); font-size: 11px; font-family: 'JetBrains Mono', monospace;">Objetivo Completado</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
                     col_c1, col_c2, col_c3 = st.columns(3)
                     
                     delta_bal = f"{ganancia:+,.2f} ({pct_ganancia:+.2f}%)" if ganancia != 0 else "$0.00"
@@ -1622,7 +1659,6 @@ with tab_estado_analytics:
                         delta_payout = f"{ganancia:+,.2f}" if ganancia != 0 else "$0.00"
                         col_c3.metric("Beneficio Acumulado (Payout)", f"${ganancia:,.2f}", delta=delta_payout)
                     
-                    # Barras de Progreso
                     if ganancia < 0:
                         str_ganancia = f"<span class='color-loss'>-${abs(ganancia):,.2f}</span>"
                     elif ganancia > 0:
@@ -1634,10 +1670,11 @@ with tab_estado_analytics:
                     
                     if not es_fondeada:
                         pct_p_val = min(max(pct_prog * 100, 0.0), 100.0)
+                        bar_color = "var(--passed-color)" if es_pasada else "var(--win-color)"
                         st.write("**Progreso hacia el Objetivo (Phase Pass):**")
                         st.markdown(f"""
                         <div style="background-color: var(--bg-sec); border: 1px solid var(--border-main); border-radius: 8px; padding: 3px; width: 100%; margin-top: 4px;">
-                            <div style="background-color: var(--win-color); width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
+                            <div style="background-color: {bar_color}; width: {pct_p_val:.1f}%; height: 14px; border-radius: 5px; transition: width 0.4s ease;"></div>
                         </div>
                         <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; margin-bottom: 12px; font-family:'JetBrains Mono', monospace;">{pct_prog*100:.1f}% alcanzado ({str_ganancia} / {str_obj})</div>
                         """, unsafe_allow_html=True)
@@ -1661,12 +1698,9 @@ with tab_estado_analytics:
                     <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; margin-bottom: 16px; font-family:'JetBrains Mono', monospace;">{pct_drawdown*100:.1f}% consumido ({str_p_act} / {str_p_max})</div>
                     """, unsafe_allow_html=True)
 
-                    # ---------------------------------------------------------
-                    # SECCIÓN COLAPSABLE: GRÁFICOS Y ANALYTICS (ACTIVADO POR DEFECTO CON value=True)
-                    # ---------------------------------------------------------
                     st.markdown("<hr style='border-color: var(--border-light); margin: 8px 0;'>", unsafe_allow_html=True)
                     
-                    if st.toggle(f"📊 Ver Gráficos y Analytics", value=True, key=f"tgl_charts_{acc_num_str}"):
+                    if st.toggle(f"📊 Ver Gráficos y Analytics", value=not es_pasada, key=f"tgl_charts_{acc_num_str}"):
                         acc_period_filter = st.radio(
                             f"📅 Rango Temporal:",
                             options=["Último mes", "Últimos 3 meses", "Últimos 6 meses", "Último año", "Total (Inicio de vida)"],
@@ -1758,12 +1792,8 @@ with tab_estado_analytics:
                                 )
                                 st.plotly_chart(fig_acc_donut, use_container_width=True)
 
-                    # ---------------------------------------------------------
-                    # SECCIÓN COLAPSABLE: RETIROS (ACTIVADO POR DEFECTO CON value=True)
-                    # ---------------------------------------------------------
                     if es_fondeada:
                         if st.checkbox("💸 Ver Historial de Retiros & Profit Split (80%)", value=True, key=f"chk_ret_{acc_num_str}"):
-                            
                             ops_acc = [
                                 op for op in ops_raw 
                                 if str(op.get("account_number")).strip() == acc_num_str.strip() 
@@ -1803,6 +1833,7 @@ with tab_estado_analytics:
                                     use_container_width=True,
                                     hide_index=True
                                 )
+
 # =============================================================================
 # TAB 3: NEGOCIO PROP FIRM & FLUJO DE CAJA (ROI) CON ETIQUETAS
 # =============================================================================
@@ -1816,7 +1847,6 @@ with tab_negocio:
         firmas_unicas = sorted(list(set([c.get("nombre_cuenta", "Desconocida") for c in cuentas_raw])))
         etiquetas_unicas = sorted(list(set([c.get("etiqueta") or "Manual" for c in cuentas_raw])))
         
-        # Callbacks para seleccionar o deseleccionar en masa
         def set_all_firmas(val):
             for f in firmas_unicas:
                 st.session_state[f"chk_firma_{f}"] = val
@@ -1842,28 +1872,20 @@ with tab_negocio:
         with col_pop1:
             firmas_activas = sum([1 for f in firmas_unicas if st.session_state.get(f"chk_firma_{f}")])
             with st.popover(f"🏢 Firmas ({firmas_activas}/{len(firmas_unicas)})", use_container_width=True):
-                # Botones minimalistas sin bordes
                 c_fall, c_fnone = st.columns(2)
                 c_fall.button("Todos", key="btn_fall", on_click=set_all_firmas, args=(True,), use_container_width=True, type="tertiary")
                 c_fnone.button("Ninguno", key="btn_fnone", on_click=set_all_firmas, args=(False,), use_container_width=True, type="tertiary")
-                
-                # Divisor sutil súper compacto
                 st.markdown("<hr style='margin: 0px 0px 12px 0px; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
-                
                 for f in firmas_unicas:
                     st.checkbox(f, key=f"chk_firma_{f}")
                     
         with col_pop2:
             etiq_activas = sum([1 for e in etiquetas_unicas if st.session_state.get(f"chk_etiq_{e}")])
             with st.popover(f"🏷️ Operativas ({etiq_activas}/{len(etiquetas_unicas)})", use_container_width=True):
-                # Botones minimalistas sin bordes
                 c_eall, c_enone = st.columns(2)
                 c_eall.button("Todos", key="btn_eall", on_click=set_all_etiq, args=(True,), use_container_width=True, type="tertiary")
                 c_enone.button("Ninguno", key="btn_enone", on_click=set_all_etiq, args=(False,), use_container_width=True, type="tertiary")
-                
-                # Divisor sutil súper compacto
                 st.markdown("<hr style='margin: 0px 0px 12px 0px; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
-                
                 for e in etiquetas_unicas:
                     st.checkbox(e, key=f"chk_etiq_{e}")
 
@@ -1871,7 +1893,6 @@ with tab_negocio:
         etiquetas_seleccionadas = [e for e in etiquetas_unicas if st.session_state.get(f"chk_etiq_{e}")]
             
         cuentas_filtradas = [
-            # ... (aquí continúa tu código de filtrado)
             c for c in cuentas_raw 
             if c.get("nombre_cuenta", "Desconocida") in firmas_seleccionadas
             and (c.get("etiqueta") or "Manual") in etiquetas_seleccionadas
@@ -1894,63 +1915,21 @@ with tab_negocio:
             total_evaluaciones = len(cuentas_filtradas)
             cuentas_fondeadas_historicas = [c for c in cuentas_filtradas if "fondeada" in str(c.get("estado", "")).lower() or "funded" in str(c.get("estado", "")).lower()]
             win_rate_evaluaciones = (len(cuentas_fondeadas_historicas) / total_evaluaciones * 100) if total_evaluaciones > 0 else 0
-            
-            tiempos_fases = []
-            tiempos_retiro = []
-            tiempos_breach = []
-            
-            for c in cuentas_filtradas:
-                id_c = str(c["account_number"])
-                obj = float(c.get("objetivo_profit", 0.0))
-                limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0) 
-                fc = c.get("fecha_compra")
-                ff = c.get("fecha_fondeo")
-                estado = str(c.get("estado", "")).lower()
-                
-                fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
-                fecha_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
-                
-                if fecha_breach and fc:
-                    try:
-                        dias_breach = (datetime.datetime.strptime(fecha_breach, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                        if dias_breach >= 0: tiempos_breach.append(dias_breach)
-                    except: pass
-
-                elif fecha_meta and fc and not fecha_breach:
-                    try:
-                        dias_fase = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                        if dias_fase >= 0: tiempos_fases.append(dias_fase)
-                    except: pass
-
-                if ("fondeada" in estado or "funded" in estado) and not fecha_breach:
-                    ops_retiros_acc = [op for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()]
-                    if ops_retiros_acc and ff:
-                        ops_retiros_acc.sort(key=lambda x: str(x.get("fecha", "")))
-                        primer_ret = str(ops_retiros_acc[0].get("fecha"))[:10]
-                        try:
-                            dias_ret = (datetime.datetime.strptime(primer_ret, "%Y-%m-%d") - datetime.datetime.strptime(str(ff)[:10], "%Y-%m-%d")).days
-                            if dias_ret >= 0: tiempos_retiro.append(dias_ret)
-                        except: pass
-
-            st.markdown("<br>", unsafe_allow_html=True)
 
             total_fase1 = len([c for c in cuentas_filtradas if "fase 1" in str(c.get("estado", "")).lower() or "phase 1" in str(c.get("estado", "")).lower()])
             total_fase2 = len([c for c in cuentas_filtradas if "fase 2" in str(c.get("estado", "")).lower() or "phase 2" in str(c.get("estado", "")).lower()])
             
-            total_aprobadas = 0
+            total_aprobadas_funded = len(cuentas_fondeadas_historicas)
+            total_pasadas_fases = len([c for c in cuentas_filtradas if es_cuenta_pasada(c)])
             total_quemadas = 0
             
             for c in cuentas_filtradas:
                 id_c = str(c["account_number"])
                 limite_perdida = float(c.get("perdida_diaria_max") or c.get("perdida_maxima") or 0.0)
                 estado_txt = str(c.get("estado", "")).lower()
-                
                 f_breach = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
-                
                 if "breached" in estado_txt or "quemada" in estado_txt or "eliminada" in estado_txt or f_breach:
                     total_quemadas += 1
-                elif "fondeada" in estado_txt or "funded" in estado_txt:
-                    total_aprobadas += 1
 
             kpi_b1, kpi_b2, kpi_b3, kpi_b4 = st.columns(4)
             
@@ -1959,7 +1938,7 @@ with tab_negocio:
                 <div class="kpi-card" style="border-left: 4px solid #F43F5E;">
                     <div class="kpi-header"><span>Gasto Total</span><i class="fa-solid fa-credit-card"></i></div>
                     <div class="kpi-value" style="color: #F43F5E;">${gasto_total:,.2f}</div>
-                    <div class="kpi-meta color-muted">Total de {total_evaluaciones} cuentas operadas</div>
+                    <div class="kpi-meta color-muted">Total de {total_evaluaciones} cuentas analizadas</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -1986,10 +1965,10 @@ with tab_negocio:
             with kpi_b4:
                 st.markdown(f"""
                 <div class="kpi-card" style="border-left: 4px solid var(--blue-accent);">
-                    <div class="kpi-header"><span>Estado de Evaluaciones</span><i class="fa-solid fa-chart-pie"></i></div>
-                    <div class="kpi-value" style="color: white; font-size: 18px;">🔥 {total_quemadas} quemadas | ✅ {total_aprobadas} fondeadas</div>
+                    <div class="kpi-header"><span>Estado de Cuentas</span><i class="fa-solid fa-chart-pie"></i></div>
+                    <div class="kpi-value" style="color: white; font-size: 16px;">🏆 {total_pasadas_fases} pasadas | ✅ {total_aprobadas_funded} funded</div>
                     <div class="kpi-meta color-muted">
-                        Fase 1: <span style="color:white; font-weight:700;">{total_fase1}</span> | Fase 2: <span style="color:white; font-weight:700;">{total_fase2}</span>
+                        🔥 Quemadas: <span style="color:#F43F5E; font-weight:700;">{total_quemadas}</span> | F1: {total_fase1} | F2: {total_fase2}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2019,6 +1998,7 @@ with tab_negocio:
             .b-funded { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
             .b-breached { background: rgba(244,63,94,0.15); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
             .b-challenge { background: rgba(41,98,255,0.15); color: #2962FF; border: 1px solid rgba(41,98,255,0.2); }
+            .b-passed { background: rgba(234,179,8,0.15); color: #EAB308; border: 1px solid rgba(234,179,8,0.25); }
             
             .badge-tag { background: var(--bg-sec); color: var(--blue-accent); border: 1px solid var(--border-light); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
             
@@ -2060,13 +2040,13 @@ with tab_negocio:
                 
                 es_fondeada = "fondeada" in estado or "funded" in estado
                 es_breached_manual = "breached" in estado or "quemada" in estado or "eliminada" in estado
+                es_pasada_det = es_cuenta_pasada(c)
                 
                 retiros_brutos_cuenta = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros if str(op.get("account_number")).strip() == id_c.strip()])
                 neto_cuenta = (retiros_brutos_cuenta * 0.80) - costo
                 
                 fecha_meta = obtener_fecha_meta_alcanzada(id_c, obj)
                 fecha_breach_auto = obtener_fecha_breach_alcanzada(id_c, limite_perdida)
-                
                 fecha_breach_final = fecha_breach_auto
                 
                 if es_breached_manual and not fecha_breach_auto:
@@ -2086,21 +2066,21 @@ with tab_negocio:
                     badge_cls = "b-funded"
                     estado_lbl = "Funded"
                     
+                elif es_pasada_det:
+                    badge_cls = "b-passed"
+                    estado_lbl = "Passed"
+                    if fecha_meta and fc:
+                        try:
+                            d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
+                            dias_str = f"<span class='tl-text' style='color:#EAB308;'><i class='fa-solid fa-trophy'></i> Superada el {fecha_meta} <span style='color:var(--text-muted); font-size:11px;'>({d_p} d.)</span></span>"
+                        except:
+                            dias_str = f"<span class='tl-text' style='color:#EAB308;'><i class='fa-solid fa-trophy'></i> Superada el {fecha_meta}</span>"
+                    else:
+                        dias_str = f"<span class='tl-text' style='color:#EAB308;'><i class='fa-solid fa-trophy'></i> Fase Superada</span>"
                 else:
                     badge_cls = "b-challenge"
                     estado_lbl = "Challenge"
-                    
-                    if fecha_meta:
-                        if fc:
-                            try:
-                                d_p = (datetime.datetime.strptime(fecha_meta, "%Y-%m-%d") - datetime.datetime.strptime(str(fc)[:10], "%Y-%m-%d")).days
-                                dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta} <span style='color:var(--text-muted); font-size:11px;'>({d_p} d.)</span></span>"
-                            except:
-                                dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
-                        else:
-                            dias_str = f"<span class='tl-text'><i class='fa-solid fa-check-circle' style='color:#10B981;'></i> Aprobada el {fecha_meta}</span>"
-                    else:
-                        dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-clock'></i> En progreso...</span>"
+                    dias_str = f"<span class='tl-text' style='color:var(--text-muted);'><i class='fa-solid fa-clock'></i> En progreso...</span>"
                 
                 if neto_cuenta > 0:
                     flujo_str = f"<span class='val-pos'>+${neto_cuenta:,.2f}</span>"
@@ -2139,9 +2119,9 @@ with tab_negocio:
             """
             
             st.components.v1.html(html_table, height=450, scrolling=True)
-            
+
 # =============================================================================
-# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & TABLA CON COLUMNA DE SÍMBOLO
+# TAB 4: HISTORIAL DE OPERACIONES DIARIAS & CAPTURAS
 # =============================================================================
 with tab_trades:
     st.markdown("<h3 style='font-size:18px; font-weight:700;'><i class='fa-solid fa-receipt' style='color:var(--blue-accent); margin-right:6px;'></i> Historial & Analítica de Operaciones</h3>", unsafe_allow_html=True)
