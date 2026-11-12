@@ -1430,7 +1430,7 @@ with tab_calendar:
                             <span style='font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
-                    tooltip_html = tooltip_m + "</div>"
+                    tooltip_m += "</div>"  # 👈 CORREGIDO: suma directamente a tooltip_m
             tooltip_m += "</div>"
 
             html_annual += f"""
