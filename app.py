@@ -1085,7 +1085,7 @@ with tab_calendar:
         .week-val { font-size: 16px; font-weight: 800; margin-top: 4px; color: #FFFFFF; font-family: 'JetBrains Mono', monospace; }
         
         .day-box { position: relative; background-color: var(--bg-card); border: 1px solid var(--border-main); border-radius: 8px; padding: 8px; min-height: 85px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; cursor: pointer; transition: border-color 0.2s; }
-        .day-box:hover { border-color: var(--border-light); }
+        .day-box:hover { border-color: var(--border-light); z-index: 1000; }
         .day-box.empty-day { background-color: var(--bg-sec); border: 1px solid var(--border-main); cursor: default; }
         
         .day-box.win-day { background-color: rgba(16, 185, 129, 0.1) !important; border: 1px solid rgba(16, 185, 129, 0.3) !important; }
@@ -1111,13 +1111,19 @@ with tab_calendar:
             overflow-y: auto;
             box-shadow: 0 10px 25px rgba(0,0,0,0.85);
             z-index: 9999;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-            pointer-events: none;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+            pointer-events: auto;
+            cursor: default;
             text-align: left;
+            box-sizing: border-box;
         }
+        .day-tooltip::-webkit-scrollbar { width: 6px; }
+        .day-tooltip::-webkit-scrollbar-track { background: var(--bg-sec); border-radius: 4px; }
+        .day-tooltip::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+        .day-tooltip::-webkit-scrollbar-thumb:hover { background: var(--primary-color); }
 
-        .day-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
-        .day-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
+        .day-tooltip.tooltip-down { top: calc(100% - 2px) !important; bottom: auto !important; }
+        .day-tooltip.tooltip-up { bottom: calc(100% - 2px) !important; top: auto !important; }
         .day-tooltip.align-left { left: 0 !important; transform: none !important; }
         .day-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
         .day-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
@@ -1223,7 +1229,29 @@ with tab_calendar:
                 else:
                     html_grid += f"<div class='day-box'><div class='day-num'>{day}</div></div>"
                     
-    html_grid += "</div></div>"
+    html_grid += """
+    </div></div>
+    <script>
+        document.querySelectorAll('.day-box').forEach(box => {
+            box.addEventListener('mouseenter', () => {
+                const tip = box.querySelector('.day-tooltip');
+                if (!tip) return;
+                const rect = box.getBoundingClientRect();
+                const spaceBelow = window.innerHeight - rect.bottom - 10;
+                const spaceAbove = rect.top - 10;
+
+                tip.classList.remove('tooltip-down', 'tooltip-up');
+                if (spaceBelow >= 220 || spaceBelow >= spaceAbove) {
+                    tip.classList.add('tooltip-down');
+                    tip.style.maxHeight = Math.max(130, Math.min(340, spaceBelow)) + 'px';
+                } else {
+                    tip.classList.add('tooltip-up');
+                    tip.style.maxHeight = Math.max(130, Math.min(340, spaceAbove)) + 'px';
+                }
+            });
+        });
+    </script>
+    """
     
     st.components.v1.html(html_grid, height=660, scrolling=True)
     
@@ -1278,6 +1306,7 @@ with tab_calendar:
         }
         .month-card:hover {
             border-color: var(--border-light) !important;
+            z-index: 1000;
         }
         .month-card.win-month { background-color: rgba(16, 185, 129, 0.1) !important; border: 1px solid rgba(16, 185, 129, 0.3) !important; }
         .month-card.loss-month { background-color: rgba(244, 63, 94, 0.1) !important; border: 1px solid rgba(244, 63, 94, 0.3) !important; }
@@ -1305,13 +1334,19 @@ with tab_calendar:
             overflow-y: auto;
             box-shadow: 0 10px 25px rgba(0,0,0,0.85);
             z-index: 9999;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-            pointer-events: none;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+            pointer-events: auto;
+            cursor: default;
             text-align: left;
+            box-sizing: border-box;
         }
+        .month-tooltip::-webkit-scrollbar { width: 6px; }
+        .month-tooltip::-webkit-scrollbar-track { background: var(--bg-sec); border-radius: 4px; }
+        .month-tooltip::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+        .month-tooltip::-webkit-scrollbar-thumb:hover { background: var(--primary-color); }
 
-        .month-tooltip.tooltip-down { top: 105% !important; bottom: auto !important; }
-        .month-tooltip.tooltip-up { bottom: 105% !important; top: auto !important; }
+        .month-tooltip.tooltip-down { top: calc(100% - 2px) !important; bottom: auto !important; }
+        .month-tooltip.tooltip-up { bottom: calc(100% - 2px) !important; top: auto !important; }
         .month-tooltip.align-left { left: 0 !important; transform: none !important; }
         .month-tooltip.align-right { right: 0 !important; left: auto !important; transform: none !important; }
         .month-tooltip.align-center { left: 50% !important; transform: translateX(-50%) !important; }
@@ -1456,7 +1491,29 @@ with tab_calendar:
             </div>
             """
 
-    html_annual += "</div></div>"
+    html_annual += """
+    </div></div>
+    <script>
+        document.querySelectorAll('.month-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                const tip = card.querySelector('.month-tooltip');
+                if (!tip) return;
+                const rect = card.getBoundingClientRect();
+                const spaceBelow = window.innerHeight - rect.bottom - 10;
+                const spaceAbove = rect.top - 10;
+
+                tip.classList.remove('tooltip-down', 'tooltip-up');
+                if (spaceBelow >= 220 || spaceBelow >= spaceAbove) {
+                    tip.classList.add('tooltip-down');
+                    tip.style.maxHeight = Math.max(130, Math.min(340, spaceBelow)) + 'px';
+                } else {
+                    tip.classList.add('tooltip-up');
+                    tip.style.maxHeight = Math.max(130, Math.min(340, spaceAbove)) + 'px';
+                }
+            });
+        });
+    </script>
+    """
     
     st.components.v1.html(html_annual, height=560, scrolling=True)
 
