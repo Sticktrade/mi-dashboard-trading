@@ -7,6 +7,7 @@ import calendar
 import datetime
 import json
 import base64
+from collections import defaultdict
 from supabase import create_client
 
 # -----------------------------------------------------------------------------
@@ -381,6 +382,11 @@ def cargar_datos():
 
 cuentas_raw, ops_raw = cargar_datos()
 
+ops_by_acc = defaultdict(list)
+if ops_raw:
+    for op in ops_raw:
+        ops_by_acc[str(op.get("account_number", "")).strip()].append(op)
+
 def parse_capturas(capturas_data):
     if not capturas_data:
         return []
@@ -461,7 +467,7 @@ def mostrar_modal_zoom(cap):
 # =============================================================================
 def obtener_fecha_meta_alcanzada(id_cuenta, objetivo):
     if objetivo <= 0: return None
-    ops = [op for op in ops_raw if str(op.get("account_number")).strip() == str(id_cuenta).strip() and str(op.get("tipo", "")).upper() != "WITHDRAWAL"]
+    ops = [op for op in ops_by_acc.get(str(id_cuenta).strip(), []) if str(op.get("tipo", "")).upper() != "WITHDRAWAL"]
     if not ops: return None
     
     ops.sort(key=lambda x: str(x.get("fecha", "")))
@@ -474,7 +480,7 @@ def obtener_fecha_meta_alcanzada(id_cuenta, objetivo):
 
 def obtener_fecha_breach_alcanzada(id_cuenta, limite_perdida):
     if limite_perdida <= 0: return None
-    ops = [op for op in ops_raw if str(op.get("account_number")).strip() == str(id_cuenta).strip() and str(op.get("tipo", "")).upper() != "WITHDRAWAL"]
+    ops = [op for op in ops_by_acc.get(str(id_cuenta).strip(), []) if str(op.get("tipo", "")).upper() != "WITHDRAWAL"]
     if not ops: return None
     
     ops.sort(key=lambda x: str(x.get("fecha", "")))
@@ -874,21 +880,24 @@ pct_global = (tot_ganado / tot_inicial * 100) if tot_inicial > 0 else 0
 df_diario_kpi = obtener_df_diario_clasificado(df_ops_trading, cuentas_raw)
 
 if not df_diario_kpi.empty:
-    wins = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'WIN'])
-    losses = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'LOSS'])
+    df_wins_d = df_diario_kpi[df_diario_kpi['clasificacion'] == 'WIN']
+    df_loss_d = df_diario_kpi[df_diario_kpi['clasificacion'] == 'LOSS']
+    wins = len(df_wins_d)
+    losses = len(df_loss_d)
     be_cnt = len(df_diario_kpi[df_diario_kpi['clasificacion'] == 'BE'])
     total_dias_operados = len(df_diario_kpi)
     win_rate = (wins / total_dias_operados * 100) if total_dias_operados > 0 else 0
+    avg_win = df_wins_d['resultado'].mean() if wins > 0 else 0.0
+    avg_loss = abs(df_loss_d['resultado'].mean()) if losses > 0 else 0.0
 else:
     wins, losses, be_cnt, total_dias_operados, win_rate = 0, 0, 0, 0, 0
+    avg_win, avg_loss = 0.0, 0.0
 
 gross_profit = df_ops_trading[df_ops_trading['resultado'] > 0]['resultado'].sum() if not df_ops_trading.empty else 0
 gross_loss = abs(df_ops_trading[df_ops_trading['resultado'] < 0]['resultado'].sum()) if not df_ops_trading.empty else 0
 profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
 
-avg_win = df_ops_trading[df_ops_trading['resultado'] > 0]['resultado'].mean() if wins > 0 else 0
-avg_loss = abs(df_ops_trading[df_ops_trading['resultado'] < 0]['resultado'].mean()) if losses > 0 else 0
-risk_reward = (avg_win / avg_loss) if avg_loss > 0 else 0
+risk_reward = (avg_win / avg_loss) if avg_loss > 0 else 0.0
 
 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
 
@@ -992,6 +1001,13 @@ with tab_calendar:
             st.session_state.cal_mes += 1
         st.session_state.selector_mes = st.session_state.cal_mes
 
+    def ir_a_hoy():
+        hoy_dt = datetime.datetime.now()
+        st.session_state.cal_mes = hoy_dt.month
+        st.session_state.cal_ano = hoy_dt.year
+        st.session_state.selector_mes = hoy_dt.month
+        st.session_state.selector_ano = hoy_dt.year
+
     def sync_selector_mes():
         st.session_state.cal_mes = st.session_state.selector_mes
 
@@ -1003,7 +1019,7 @@ with tab_calendar:
     if "selector_ano" not in st.session_state:
         st.session_state.selector_ano = st.session_state.cal_ano
 
-    c_arr_izq, c_m, c_arr_der, _, c_y = st.columns([0.25, 2.5, 0.25, 0.5, 2.5], vertical_alignment="bottom")
+    c_arr_izq, c_m, c_arr_der, c_hoy, c_y = st.columns([0.25, 2.3, 0.25, 0.6, 2.3], vertical_alignment="bottom")
     
     with c_arr_izq:
         st.button("❮", key="btn_nav_prev", on_click=mes_anterior, help="Mes anterior", type="tertiary", use_container_width=True)
@@ -1013,6 +1029,9 @@ with tab_calendar:
         
     with c_arr_der:
         st.button("❯", key="btn_nav_next", on_click=mes_siguiente, help="Mes siguiente", type="tertiary", use_container_width=True)
+
+    with c_hoy:
+        st.button("Hoy", key="btn_nav_hoy", on_click=ir_a_hoy, help="Volver al mes actual", use_container_width=True)
             
     with c_y:
         st.number_input("Año:", min_value=2024, max_value=2030, key="selector_ano", on_change=sync_selector_ano)
@@ -1465,7 +1484,7 @@ with tab_calendar:
                             <span style='font-weight:700;'>{s_sign}${s_pnl:,.2f}</span>
                         </div>
                         """
-                    tooltip_m += "</div>"  # 👈 CORREGIDO: suma directamente a tooltip_m
+                    tooltip_m += "</div>"
             tooltip_m += "</div>"
 
             html_annual += f"""
@@ -1626,6 +1645,101 @@ with tab_estado_analytics:
                     )
                     st.plotly_chart(fig_donut, use_container_width=True)
 
+                # --- MÉTRICAS DE RIESGO Y CONSISTENCIA ---
+                pico_max = df_ops_sorted["balance_cum"].cummax()
+                drawdowns_usd = df_ops_sorted["balance_cum"] - pico_max
+                max_dd_usd = drawdowns_usd.min() if not drawdowns_usd.empty else 0.0
+                idx_dd = drawdowns_usd.idxmin() if not drawdowns_usd.empty else None
+                pico_en_dd = pico_max.loc[idx_dd] if idx_dd is not None else tot_inicial_g
+                max_dd_pct = (max_dd_usd / pico_en_dd * 100) if pico_en_dd > 0 else 0.0
+
+                total_d_g = len(df_diario_g) if not df_diario_g.empty else 0
+                p_win_g = (wins_g / total_d_g) if total_d_g > 0 else 0.0
+                p_loss_g = (losses_g / total_d_g) if total_d_g > 0 else 0.0
+                avg_w_g = df_diario_g[df_diario_g['clasificacion'] == 'WIN']['resultado'].mean() if wins_g > 0 else 0.0
+                avg_l_g = abs(df_diario_g[df_diario_g['clasificacion'] == 'LOSS']['resultado'].mean()) if losses_g > 0 else 0.0
+                expectancy_g = (p_win_g * avg_w_g) - (p_loss_g * avg_l_g)
+
+                df_dias_cons = df_diario_g.groupby("fecha_dia", as_index=False)["resultado"].sum().sort_values("fecha_dia") if not df_diario_g.empty else pd.DataFrame()
+                max_w_streak, max_l_streak, cur_w, cur_l = 0, 0, 0, 0
+                if not df_dias_cons.empty:
+                    for res_d in df_dias_cons["resultado"]:
+                        if res_d > 0:
+                            cur_w += 1; cur_l = 0
+                            max_w_streak = max(max_w_streak, cur_w)
+                        elif res_d < 0:
+                            cur_l += 1; cur_w = 0
+                            max_l_streak = max(max_l_streak, cur_l)
+                        else:
+                            cur_w = 0; cur_l = 0
+
+                rk1, rk2, rk3, rk4 = st.columns(4)
+                rk1.metric("Max Drawdown ($)", f"-${abs(max_dd_usd):,.2f}", delta=f"{max_dd_pct:.2f}%", delta_color="inverse")
+                rk2.metric("Expectancy / Día", f"${expectancy_g:+,.2f}")
+                rk3.metric("Racha Máx. Ganadora", f"{max_w_streak} días")
+                rk4.metric("Racha Máx. Perdedora", f"{max_l_streak} días")
+
+                # --- DESGLOSE POR SÍMBOLO Y DÍA DE LA SEMANA ---
+                col_s1, col_s2 = st.columns(2)
+
+                with col_s1:
+                    df_sym = df_global_filtered.groupby("simbolo").agg(
+                        pnl=("resultado", "sum"),
+                        ops=("resultado", "count"),
+                        wins=("resultado", lambda s: (s > 0).sum())
+                    ).reset_index()
+                    df_sym["wr"] = (df_sym["wins"] / df_sym["ops"] * 100).round(1)
+                    df_sym = df_sym.sort_values("pnl", ascending=True)
+                    df_sym["color"] = df_sym["pnl"].apply(lambda x: "#10B981" if x >= 0 else "#F43F5E")
+
+                    fig_sym = go.Figure(go.Bar(
+                        x=df_sym["pnl"],
+                        y=df_sym["simbolo"],
+                        orientation="h",
+                        marker_color=df_sym["color"],
+                        text=df_sym.apply(lambda r: f"${r['pnl']:+,.0f} ({r['wr']:.0f}% WR | {r['ops']} ops)", axis=1),
+                        textposition="auto",
+                        hovertemplate="<b>%{y}</b><br>PnL: $%{x:,.2f}<extra></extra>"
+                    ))
+                    fig_sym.update_layout(
+                        title="<b>Rendimiento y Win Rate por Símbolo</b>",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#E2E8F0", family="Inter"),
+                        xaxis=dict(gridcolor="#1E293B", zerolinecolor="#2D384D"),
+                        yaxis=dict(gridcolor="#1E293B"),
+                        margin=dict(l=20, r=20, t=40, b=20), height=320
+                    )
+                    st.plotly_chart(fig_sym, use_container_width=True)
+
+                with col_s2:
+                    dias_map = {0: "Lun", 1: "Mar", 2: "Mié", 3: "Jue", 4: "Vie", 5: "Sáb", 6: "Dom"}
+                    df_dow = df_global_filtered.copy()
+                    df_dow["dow_num"] = df_dow["fecha_dt"].dt.weekday
+                    df_dow = df_dow.groupby("dow_num").agg(
+                        pnl=("resultado", "sum"),
+                        ops=("resultado", "count")
+                    ).reset_index().sort_values("dow_num")
+                    df_dow["dia"] = df_dow["dow_num"].map(dias_map)
+                    df_dow["color"] = df_dow["pnl"].apply(lambda x: "#10B981" if x >= 0 else "#F43F5E")
+
+                    fig_dow = go.Figure(go.Bar(
+                        x=df_dow["dia"],
+                        y=df_dow["pnl"],
+                        marker_color=df_dow["color"],
+                        text=df_dow.apply(lambda r: f"${r['pnl']:+,.0f}<br>({r['ops']} ops)", axis=1),
+                        textposition="auto",
+                        hovertemplate="<b>%{x}</b><br>PnL: $%{y:,.2f}<extra></extra>"
+                    ))
+                    fig_dow.update_layout(
+                        title="<b>PnL por Día de la Semana</b>",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#E2E8F0", family="Inter"),
+                        xaxis=dict(gridcolor="#1E293B"),
+                        yaxis=dict(gridcolor="#1E293B", zerolinecolor="#2D384D"),
+                        margin=dict(l=20, r=20, t=40, b=20), height=320
+                    )
+                    st.plotly_chart(fig_dow, use_container_width=True)
+
         st.divider()
 
         def obtener_llave_orden(c):
@@ -1707,8 +1821,8 @@ with tab_estado_analytics:
                     col_c2.metric("Margen Pérdida Máxima", f"${margen_max:,.2f}", delta=delta_loss, delta_color="normal" if p_act > 0 else "off")
                     col_c2.caption(f"Límite máximo total: ${p_max:,.2f}")
                     
+                    obj = float(c.get("objetivo_profit", 0.0))
                     if not es_fondeada:
-                        obj = float(c.get("objetivo_profit", 0.0))
                         pct_prog = min(max(ganancia / obj, 0.0), 1.0) if obj > 0 else 1.0
                         delta_obj = f"{ganancia:+,.2f} de {obj:,.2f}"
                         col_c3.metric("Objetivo Profit Target", f"${obj:,.2f}", delta=delta_obj)
@@ -1819,6 +1933,11 @@ with tab_estado_analytics:
                                     fillcolor='rgba(41, 98, 255, 0.1)',
                                     hovertemplate="<b>Fecha:</b> %{x|%Y-%m-%d}<br><b>Balance:</b> $%{y:,.2f}<extra></extra>"
                                 ))
+                                fig_acc_bal.add_hline(y=bal_ini, line_dash="dot", line_color="#64748B", annotation_text="Inicial", annotation_position="bottom right")
+                                if not es_fondeada and obj > 0:
+                                    fig_acc_bal.add_hline(y=bal_ini + obj, line_dash="dash", line_color="#10B981", annotation_text="Target", annotation_position="top right")
+                                if p_max > 0:
+                                    fig_acc_bal.add_hline(y=bal_ini - p_max, line_dash="dash", line_color="#F43F5E", annotation_text="Max Loss", annotation_position="bottom right")
                                 fig_acc_bal.update_layout(
                                     title=f'<b>Curva de Balance — {acc_name}</b>',
                                     paper_bgcolor='rgba(0,0,0,0)',
@@ -1852,9 +1971,8 @@ with tab_estado_analytics:
                     if es_fondeada:
                         if st.checkbox("💸 Ver Historial de Retiros & Profit Split (80%)", value=True, key=f"chk_ret_{acc_num_str}"):
                             ops_acc = [
-                                op for op in ops_raw 
-                                if str(op.get("account_number")).strip() == acc_num_str.strip() 
-                                and "WITHDRAWAL" in str(op.get("tipo", "")).upper()
+                                op for op in ops_by_acc.get(acc_num_str.strip(), [])
+                                if "WITHDRAWAL" in str(op.get("tipo", "")).upper()
                             ]
                             
                             if not ops_acc:
@@ -1962,7 +2080,11 @@ with tab_negocio:
             
             gasto_total = sum([float(c.get("costo_inscripcion") or 0.0) for c in cuentas_filtradas])
             
-            ops_retiros = [op for op in ops_raw if "WITHDRAWAL" in str(op.get("tipo", "")).upper() and str(op.get("account_number")).strip() in ids_filtrados]
+            ops_retiros = []
+            for id_f in ids_filtrados:
+                for op in ops_by_acc.get(id_f, []):
+                    if "WITHDRAWAL" in str(op.get("tipo", "")).upper():
+                        ops_retiros.append(op)
             retiros_brutos = sum([abs(float(op.get("resultado", 0))) for op in ops_retiros])
             retiros_netos_trader = retiros_brutos * 0.80 
             
@@ -2107,7 +2229,7 @@ with tab_negocio:
                 fecha_breach_final = fecha_breach_auto
                 
                 if es_breached_manual and not fecha_breach_auto:
-                    ops_acc = [op for op in ops_raw if str(op.get("account_number")).strip() == id_c.strip()]
+                    ops_acc = list(ops_by_acc.get(id_c.strip(), []))
                     if ops_acc:
                         ops_acc.sort(key=lambda x: str(x.get("fecha", "")), reverse=True)
                         fecha_breach_final = str(ops_acc[0].get("fecha"))[:10]
@@ -2175,7 +2297,109 @@ with tab_negocio:
             </div>
             """
             
-            st.components.v1.html(html_table, height=450, scrolling=True)
+            altura_tabla = min(680, 75 + len(cuentas_filtradas) * 58)
+            st.components.v1.html(html_table, height=altura_tabla, scrolling=True)
+
+            # --- COMPARATIVA POR ETIQUETA OPERATIVA Y FLUJO MENSUAL ---
+            st.divider()
+            col_neg1, col_neg2 = st.columns([1.1, 1.3])
+
+            with col_neg1:
+                st.markdown("#### 🏷️ Rentabilidad por Tipo de Operativa")
+                resumen_etiq = defaultdict(lambda: {"cuentas": 0, "gasto": 0.0, "retiro_neto": 0.0, "aprobadas": 0})
+
+                for c in cuentas_filtradas:
+                    et = c.get("etiqueta") or "Manual"
+                    id_c = str(c["account_number"]).strip()
+                    est_l = str(c.get("estado", "")).lower()
+                    es_aprob = ("fondeada" in est_l or "funded" in est_l or es_cuenta_pasada(c))
+                    ret_bruto_c = sum(
+                        abs(float(op.get("resultado", 0)))
+                        for op in ops_by_acc.get(id_c, [])
+                        if "WITHDRAWAL" in str(op.get("tipo", "")).upper()
+                    )
+
+                    resumen_etiq[et]["cuentas"] += 1
+                    resumen_etiq[et]["gasto"] += float(c.get("costo_inscripcion") or 0.0)
+                    resumen_etiq[et]["retiro_neto"] += ret_bruto_c * 0.80
+                    if es_aprob:
+                        resumen_etiq[et]["aprobadas"] += 1
+
+                rows_etiq = []
+                for et, d in resumen_etiq.items():
+                    flujo_e = d["retiro_neto"] - d["gasto"]
+                    roi_e = (flujo_e / d["gasto"] * 100) if d["gasto"] > 0 else 0.0
+                    tasa_e = (d["aprobadas"] / d["cuentas"] * 100) if d["cuentas"] > 0 else 0.0
+                    rows_etiq.append({
+                        "Operativa": et,
+                        "Cuentas": d["cuentas"],
+                        "Gasto ($)": d["gasto"],
+                        "Retiros Netos ($)": d["retiro_neto"],
+                        "Flujo Neto ($)": flujo_e,
+                        "ROI (%)": roi_e,
+                        "Tasa Aprob. (%)": tasa_e
+                    })
+
+                df_etiq_res = pd.DataFrame(rows_etiq).sort_values("Flujo Neto ($)", ascending=False)
+                st.dataframe(
+                    df_etiq_res.style.format({
+                        "Gasto ($)": "${:,.2f}",
+                        "Retiros Netos ($)": "${:,.2f}",
+                        "Flujo Neto ($)": "${:+,.2f}",
+                        "ROI (%)": "{:+.1f}%",
+                        "Tasa Aprob. (%)": "{:.1f}%"
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            with col_neg2:
+                st.markdown("#### 📊 Flujo Mensual (Gastos vs Retiros) & Break-Even")
+                flujo_mensual = defaultdict(lambda: {"gasto": 0.0, "retiro": 0.0})
+
+                for c in cuentas_filtradas:
+                    fc = c.get("fecha_compra")
+                    costo_c = float(c.get("costo_inscripcion") or 0.0)
+                    if fc and costo_c > 0:
+                        mes_k = str(fc)[:7]
+                        flujo_mensual[mes_k]["gasto"] += costo_c
+
+                for op in ops_retiros:
+                    f_op = str(op.get("fecha", ""))[:7]
+                    if len(f_op) == 7:
+                        flujo_mensual[f_op]["retiro"] += abs(float(op.get("resultado", 0))) * 0.80
+
+                if not flujo_mensual:
+                    st.info("Asigna fechas de compra o registra retiros para ver la evolución mensual del flujo de caja.")
+                else:
+                    meses_ord = sorted(flujo_mensual.keys())
+                    gastos_m = [flujo_mensual[m]["gasto"] for m in meses_ord]
+                    retiros_m = [flujo_mensual[m]["retiro"] for m in meses_ord]
+                    flujo_acum = []
+                    acum_val = 0.0
+                    for g_m, r_m in zip(gastos_m, retiros_m):
+                        acum_val += (r_m - g_m)
+                        flujo_acum.append(acum_val)
+
+                    fig_flujo = go.Figure()
+                    fig_flujo.add_trace(go.Bar(name="Gastos ($)", x=meses_ord, y=gastos_m, marker_color="#F43F5E"))
+                    fig_flujo.add_trace(go.Bar(name="Retiros Netos ($)", x=meses_ord, y=retiros_m, marker_color="#10B981"))
+                    fig_flujo.add_trace(go.Scatter(
+                        name="Flujo Neto Acumulado ($)", x=meses_ord, y=flujo_acum,
+                        mode="lines+markers", line=dict(color="#2962FF", width=3), marker=dict(size=7)
+                    ))
+                    fig_flujo.add_hline(y=0, line_dash="dot", line_color="#94A3B8")
+                    fig_flujo.update_layout(
+                        barmode="group",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#E2E8F0", family="Inter"),
+                        xaxis=dict(gridcolor="#1E293B"),
+                        yaxis=dict(gridcolor="#1E293B"),
+                        margin=dict(l=20, r=20, t=20, b=20),
+                        height=330,
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+                    )
+                    st.plotly_chart(fig_flujo, use_container_width=True)
 
 # =============================================================================
 # TAB 4: HISTORIAL DE OPERACIONES DIARIAS & CAPTURAS
@@ -2186,8 +2410,11 @@ with tab_trades:
     
     hoy = datetime.date.today()
     lunes_semana_actual = hoy - datetime.timedelta(days=hoy.weekday())
+
+    cuentas_disp = sorted(df_ops_trading["nombre_cuenta"].dropna().unique().tolist()) if not df_ops_trading.empty and "nombre_cuenta" in df_ops_trading.columns else []
+    simbolos_disp = sorted([s for s in df_ops_trading["simbolo"].dropna().unique().tolist() if str(s).upper() != "N/A"]) if not df_ops_trading.empty and "simbolo" in df_ops_trading.columns else []
     
-    col_f1, col_f2 = st.columns([2, 2])
+    col_f1, col_f2, col_f3, col_f4 = st.columns([1.3, 1.2, 1.2, 1.3])
     
     with col_f1:
         rango_fechas = st.date_input(
@@ -2203,10 +2430,31 @@ with tab_trades:
             default=["WIN", "LOSS", "BE"],
             key="filtro_multiselect_estados"
         )
+
+    with col_f3:
+        filtro_cuentas_t4 = st.multiselect(
+            "🏦 Filtrar Cuenta:",
+            options=cuentas_disp,
+            placeholder="Todas las cuentas",
+            key="filtro_multiselect_cuentas_t4"
+        )
+
+    with col_f4:
+        filtro_simbolos_t4 = st.multiselect(
+            "📈 Filtrar Símbolo:",
+            options=simbolos_disp,
+            placeholder="Todos los símbolos",
+            key="filtro_multiselect_simbolos_t4"
+        )
         
     if df_ops_trading.empty:
         st.info("No hay operaciones registradas para las cuentas seleccionadas.")
     else:
+        ops_sesion_map = defaultdict(list)
+        for op in df_ops_trading.to_dict("records"):
+            k_ses = (str(op.get("account_number", "")).strip(), op["fecha_dia"])
+            ops_sesion_map[k_ses].append(op)
+
         df_diario = obtener_df_diario_clasificado(df_ops_trading, cuentas_raw)
         
         if isinstance(rango_fechas, (list, tuple)) and len(rango_fechas) == 2:
@@ -2220,6 +2468,17 @@ with tab_trades:
             
         if filtro_estados:
             df_filtered_tab4 = df_filtered_tab4[df_filtered_tab4["clasificacion"].isin(filtro_estados)]
+
+        if filtro_cuentas_t4:
+            df_filtered_tab4 = df_filtered_tab4[df_filtered_tab4["nombre_cuenta"].isin(filtro_cuentas_t4)]
+
+        if filtro_simbolos_t4:
+            set_syms = set(filtro_simbolos_t4)
+            mask_sym = df_filtered_tab4.apply(
+                lambda r: any(str(op.get("simbolo", "")).strip().upper() in set_syms for op in ops_sesion_map.get((str(r["acc_id_str"]).strip(), r["fecha_dia"]), [])),
+                axis=1
+            )
+            df_filtered_tab4 = df_filtered_tab4[mask_sym]
             
         df_filtered_tab4 = df_filtered_tab4.sort_values("fecha_dia", ascending=False)
         
@@ -2300,20 +2559,30 @@ with tab_trades:
             
             st.markdown("<hr style='margin: 6px 0 10px 0; border-color: var(--border-light);'>", unsafe_allow_html=True)
 
-            list_sessions = df_filtered_tab4.to_dict("records")
+            ITEMS_POR_PAGINA = 20
+            total_sesiones = len(df_filtered_tab4)
+            total_paginas = max(1, (total_sesiones + ITEMS_POR_PAGINA - 1) // ITEMS_POR_PAGINA)
+
+            col_pag1, col_pag2 = st.columns([3.5, 1])
+            with col_pag1:
+                st.caption(f"Total: {total_sesiones} sesiones encontradas.")
+            with col_pag2:
+                pagina_actual = st.number_input("Página", min_value=1, max_value=total_paginas, value=1, step=1, key="pag_tab_trades")
+
+            inicio_idx = (pagina_actual - 1) * ITEMS_POR_PAGINA
+            fin_idx = inicio_idx + ITEMS_POR_PAGINA
+            list_sessions = df_filtered_tab4.iloc[inicio_idx:fin_idx].to_dict("records")
             
             for idx, row in enumerate(list_sessions):
-                f_str = str(row["fecha_dia"])
+                f_dia_obj = row["fecha_dia"]
+                f_str = str(f_dia_obj)
                 acc_name = str(row["nombre_cuenta"])
                 acc_id_str = str(row["acc_id_str"])
                 res_num = float(row["resultado"])
                 pct_num = float(row["pct_rendimiento"])
                 clasif = str(row["clasificacion"])
                 
-                matching_ops = [
-                    op for op in ops_raw 
-                    if str(op.get("account_number")) == acc_id_str and str(op.get("fecha", "")).startswith(f_str) and str(op.get("tipo", "")).upper() != "WITHDRAWAL"
-                ]
+                matching_ops = ops_sesion_map.get((acc_id_str.strip(), f_dia_obj), [])
                 
                 op_row = matching_ops[0] if matching_ops else {
                     "account_number": acc_id_str,
